@@ -1,3 +1,6 @@
 [submodule "cuBool"]
 	path = cuBool
 	url = https://github.com/mitya-y/cuBool.git
+[submodule "fast_matrix_market"]
+	path = fast_matrix_market
+	url = https://github.com/alugowski/fast_matrix_market

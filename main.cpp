@@ -1,9 +1,13 @@
 #include <algorithm>
 #include <cassert>
+#include <fstream>
 #include <iostream>
 #include <vector>
+#include <string_view>
 
 #include <cubool.h>
+
+#include <fast_matrix_market/fast_matrix_market.hpp>
 
 cuBool_Matrix regular_path_query(
     // vector of sparse graph matrices for each label
@@ -93,12 +97,77 @@ cuBool_Matrix regular_path_query(
     cuBool_Matrix_Nvals(next_frontier, &states);
   }
 
+  cuBool_Matrix_Free(next_frontier);
+  cuBool_Matrix_Free(frontier);
+  cuBool_Matrix_Free(symbol_frontier);
+
   return reacheble;
 }
 
 void test() {
+  cuBool_Initialize(CUBOOL_HINT_NO);
+
+  std::vector<cuBool_Matrix> graph;
+  std::vector<cuBool_Index> source_vertices;
+  std::vector<cuBool_Matrix> automat;
+  std::vector<cuBool_Index> start_states;
+
+  std::vector<std::string> graph_data { "test_data/a.mtx", "test_data/b.mtx" };
+  std::vector<std::string> automat_data { "test_data/1_a.mtx", "" };
+  std::string_view meta_data("test_data/1_meta.txt");
+  std::string_view sources_data("test_data/1_sources.txt");
+
+  int64_t nrows = 0, ncols = 0;
+  std::vector<cuBool_Index> rows, cols;
+  std::vector<bool> vals;
+
+  // load graph
+  graph.reserve(graph_data.size());
+  for (const auto &data : graph_data) {
+    graph.emplace_back();
+    if (data.empty()) {
+      continue;
+    }
+
+    std::ifstream file(data);
+    if (!file) {
+      throw std::runtime_error("error open file");
+    }
+    fast_matrix_market::read_matrix_market_triplet(file, nrows, ncols, rows, cols, vals);
+
+    cuBool_Matrix_New(&graph.back(), nrows, ncols);
+    cuBool_Matrix_Build(graph.back(), rows.data(), cols.data(), vals.size(), CUBOOL_HINT_NO);
+  }
+
+  // load automat
+  automat.reserve(automat_data.size());
+  for (const auto &data : automat_data) {
+    automat.emplace_back();
+    if (data.empty()) {
+      continue;
+    }
+
+    std::ifstream file(data);
+    if (!file) {
+      throw std::runtime_error("error open file");
+    }
+    fast_matrix_market::read_matrix_market_triplet(file, nrows, ncols, rows, cols, vals);
+
+    cuBool_Matrix_New(&automat.back(), nrows, ncols);
+    cuBool_Matrix_Build(automat.back(), rows.data(), cols.data(), vals.size(), CUBOOL_HINT_NO);
+  }
+
+  // temporary hardcoded
+  source_vertices = {0};
+  start_states = {0};
+
+  auto answer = regular_path_query(graph, source_vertices, automat, start_states);
+
+  cuBool_Matrix_Free(answer);
+
+  cuBool_Finalize();
 }
 
 int main() {
-  std::cout << "hello world\n";
+  test();
 }

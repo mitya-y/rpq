@@ -10,5 +10,10 @@ target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC cuBool/cubool/include/cu
 target_link_directories(${CMAKE_PROJECT_NAME} PUBLIC build/cuBool/cubool)
 target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC cubool)
 
-# target_sources(${CMAKE_PROJECT_NAME} PUBLIC main.cpp cuBool/cubool/include/cubool.h)
 target_sources(${CMAKE_PROJECT_NAME} PUBLIC main.cpp)
+
+# load .mtx format utility
+add_subdirectory(fast_matrix_market)
+target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC fast_matrix_market/include)
+
+file(COPY test_data DESTINATION .)
