@@ -1,0 +1,3 @@
+[submodule "cuBool"]
+	path = cuBool
+	url = https://github.com/mitya-y/cuBool.git
