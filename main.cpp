@@ -9,52 +9,19 @@
 
 #include <fast_matrix_market/fast_matrix_market.hpp>
 
-// bad temporary algorithm
-static void invert_matrix(cuBool_Matrix mask) {
-  // invert mask
-  cuBool_Index nvals;
-  cuBool_Matrix_Nvals(mask, &nvals);
-
-  std::vector<cuBool_Index> rows(nvals), cols(nvals);
-  cuBool_Matrix_ExtractPairs(mask, rows.data(), cols.data(), &nvals);
-
-  cuBool_Index ncols, nrows;
-  cuBool_Matrix_Ncols(mask, &ncols);
-  cuBool_Matrix_Nrows(mask, &nrows);
-  std::vector inverted_mask(nrows, std::vector(ncols, true));
-
-  for (int i = 0; i < nvals; i++) {
-    inverted_mask[rows[i]][cols[i]] = false;
-  }
-
-  rows.clear();
-  rows.reserve(ncols * nvals - nvals);
-  cols.clear();
-  cols.reserve(ncols * nvals - nvals);
-  for (cuBool_Index i = 0; i < nrows; i++) {
-    for (cuBool_Index j = 0; j < ncols; j++) {
-      if (inverted_mask[i][j]) {
-        rows.push_back(i);
-        cols.push_back(j);
-      }
+static void print_cubool_matrix(cuBool_Matrix matrix, std::string name = "") {
+    if (name != "") {
+        std::cout << name << std::endl;
     }
-  }
 
-  cuBool_Matrix_Build(mask, rows.data(), cols.data(), rows.size(), CUBOOL_HINT_NO);
-}
+    cuBool_Index nvals;
+    cuBool_Matrix_Nvals(matrix, &nvals);
+    std::vector<cuBool_Index> rows(nvals), cols(nvals);
+    cuBool_Matrix_ExtractPairs(matrix, rows.data(), cols.data(), &nvals);
 
-static void apply_not_mask(cuBool_Matrix matrix, cuBool_Matrix mask) {
-  cuBool_Matrix inverted_mask;
-  cuBool_Matrix_Duplicate(mask, &inverted_mask);
-  invert_matrix(inverted_mask);
-
-  cuBool_Matrix tmp_frontier;
-  cuBool_Matrix_Duplicate(matrix, &tmp_frontier);
-
-  cuBool_Matrix_EWiseMult(matrix, tmp_frontier, inverted_mask, CUBOOL_HINT_NO);
-
-  cuBool_Matrix_Free(inverted_mask);
-  cuBool_Matrix_Free(tmp_frontier);
+    for (int i = 0; i < nvals; i++) {
+        printf("(%d, %d)\n", rows[i], cols[i]);
+    }
 }
 
 cuBool_Matrix regular_path_query(
@@ -132,13 +99,16 @@ cuBool_Matrix regular_path_query(
 
   cuBool_Index states = source_vertices.size();
 
+  cuBool_Matrix result;
+  cuBool_Matrix_New(&result, automat_nodes_number, graph_nodes_number);
+
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
     std::swap(frontier, next_frontier);
 
     uint32_t nvals;
     cuBool_Matrix_Nvals(reacheble, &nvals);
-    std::cout << "nvals = " << nvals << " states = " << states << std::endl;
+    std::cout << "nvals = " << nvals << ", states = " << states << std::endl;
 
     // clear next_frontier
     cuBool_Matrix_Build(next_frontier, nullptr, nullptr, 0, CUBOOL_HINT_NO);
@@ -157,7 +127,8 @@ cuBool_Matrix regular_path_query(
       assert(status == CUBOOL_STATUS_SUCCESS);
 
       // apply mask
-      apply_not_mask(next_frontier, reacheble);
+      cuBool_Matrix_ApplyInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
+      std::swap(result, next_frontier);
 
       cuBool_Matrix_Nvals(symbol_frontier, &nvals);
       std::cout << "nvals symbol_frontier = " << nvals << std::endl;
@@ -166,10 +137,9 @@ cuBool_Matrix regular_path_query(
     }
 
     // this must be accumulate with mask and save old value: reacheble += next_frontier & reacheble
-    cuBool_Matrix tmp_reacheble;
-    cuBool_Matrix_Duplicate(reacheble, &tmp_reacheble);
-    cuBool_Matrix_EWiseAdd(reacheble, tmp_reacheble, next_frontier, CUBOOL_HINT_NO);
-    cuBool_Matrix_Free(tmp_reacheble);
+    //
+    cuBool_Matrix_EWiseAdd(result, reacheble, next_frontier, CUBOOL_HINT_NO);
+    std::swap(result, reacheble);
 
     cuBool_Matrix_Nvals(next_frontier, &states);
   }
@@ -177,6 +147,7 @@ cuBool_Matrix regular_path_query(
   cuBool_Matrix_Free(next_frontier);
   cuBool_Matrix_Free(frontier);
   cuBool_Matrix_Free(symbol_frontier);
+  cuBool_Matrix_Free(result);
 
   return reacheble;
 }
@@ -249,6 +220,8 @@ void test(const Config &config) {
   // std::cout << n << std::endl;
   // cuBool_Matrix_Ncols(answer, &n);
   // std::cout << n << std::endl;
+
+  print_cubool_matrix(answer);
 
   cuBool_Matrix_Free(answer);
 
