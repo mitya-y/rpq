@@ -106,9 +106,9 @@ cuBool_Matrix regular_path_query(
   while (states > 0) {
     std::swap(frontier, next_frontier);
 
-    uint32_t nvals;
-    cuBool_Matrix_Nvals(reacheble, &nvals);
-    std::cout << "nvals = " << nvals << ", states = " << states << std::endl;
+    // uint32_t nvals;
+    // cuBool_Matrix_Nvals(reacheble, &nvals);
+    // std::cout << "nvals = " << nvals << ", states = " << states << std::endl;
 
     // clear next_frontier
     cuBool_Matrix_Build(next_frontier, nullptr, nullptr, 0, CUBOOL_HINT_NO);
@@ -130,10 +130,10 @@ cuBool_Matrix regular_path_query(
       cuBool_Matrix_ApplyInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
       std::swap(result, next_frontier);
 
-      cuBool_Matrix_Nvals(symbol_frontier, &nvals);
-      std::cout << "nvals symbol_frontier = " << nvals << std::endl;
-      cuBool_Matrix_Nvals(next_frontier, &nvals);
-      std::cout << "nvals next_frontier = " << nvals << std::endl;
+      // cuBool_Matrix_Nvals(symbol_frontier, &nvals);
+      // std::cout << "nvals symbol_frontier = " << nvals << std::endl;
+      // cuBool_Matrix_Nvals(next_frontier, &nvals);
+      // std::cout << "nvals next_frontier = " << nvals << std::endl;
     }
 
     // this must be accumulate with mask and save old value: reacheble += next_frontier & reacheble
@@ -155,6 +155,7 @@ cuBool_Matrix regular_path_query(
 struct Config {
   std::vector<std::string> graph_data;
   std::vector<std::string> automat_data;
+  std::vector<uint32_t> sources;
   std::string_view meta_data;
   std::string_view sources_data;
 };
@@ -211,17 +212,19 @@ void test(const Config &config) {
   source_vertices = {0};
   start_states = {0};
 
+  source_vertices = config.sources;
+  for (cuBool_Index &s : source_vertices) {
+    s--;
+  }
+
   auto answer = regular_path_query(graph, source_vertices, automat, start_states);
 
-  uint32_t n;
-  cuBool_Matrix_Nvals(answer, &n);
-  std::cout << n << std::endl;
-  // cuBool_Matrix_Nrows(answer, &n);
-  // std::cout << n << std::endl;
-  // cuBool_Matrix_Ncols(answer, &n);
+  // uint32_t n;
+  // cuBool_Matrix_Nvals(answer, &n);
   // std::cout << n << std::endl;
 
-  print_cubool_matrix(answer);
+  print_cubool_matrix(answer, "result");
+  printf("\n");
 
   cuBool_Matrix_Free(answer);
 
@@ -229,17 +232,37 @@ void test(const Config &config) {
 }
 
 int main() {
-  Config config {
-    .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
-    .automat_data { "test_data/1_a.mtx", "" },
-    .meta_data = "test_data/1_meta.txt",
-    .sources_data = "test_data/1_sources.txt",
+  std::vector<Config> configs {
+    {
+      .graph_data = { "test_data/example/graph_a.mtx", "test_data/example/graph_b.mtx" },
+      .automat_data = { "test_data/example/automat_a.mtx", "test_data/example/automat_b.mtx" },
+      .sources = {1},
+    },
+    {
+      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
+      .automat_data { "test_data/1_a.mtx", "" },
+      .sources = {1},
+    },
+    {
+      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
+      .automat_data { "test_data/2_a.mtx", "test_data/2_b.mtx" },
+      .sources = {2},
+    },
+    {
+      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
+      .automat_data { "test_data/3_a.mtx", "test_data/3_b.mtx" },
+      .sources = {3, 6},
+    },
+    {
+      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
+      .automat_data { "", "test_data/4_b.mtx" },
+      .sources = {4},
+    },
   };
 
-  config = Config {
-    .graph_data = { "test_data/example/graph_a.mtx", "test_data/example/graph_b.mtx" },
-    .automat_data = { "test_data/example/automat_a.mtx", "test_data/example/automat_b.mtx" },
-  };
-
-  test(config);
+  // configs.resize(3);
+  for (const auto &config : configs) {
+    test(config);
+  }
 }
+
