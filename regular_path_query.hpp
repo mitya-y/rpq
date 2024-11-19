@@ -11,3 +11,5 @@ cuBool_Matrix regular_path_query(
     // vector of sparse automat matrices for each label
     const std::vector<cuBool_Matrix> &automat,
     const std::vector<cuBool_Index> &start_states);
+
+bool benchmark();

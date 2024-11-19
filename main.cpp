@@ -14,7 +14,7 @@ struct Config {
   std::string_view sources_data;
 };
 
-void test(const Config &config) {
+void test_on_config(const Config &config) {
   cuBool_Initialize(CUBOOL_HINT_NO);
 
   std::vector<cuBool_Matrix> graph;
@@ -85,7 +85,7 @@ void test(const Config &config) {
   cuBool_Finalize();
 }
 
-int main() {
+void test() {
   std::vector<Config> configs {
     {
       .graph_data = { "test_data/example/graph_a.mtx", "test_data/example/graph_b.mtx" },
@@ -116,7 +116,12 @@ int main() {
 
   // configs.resize(3);
   for (const auto &config : configs) {
-    test(config);
+    test_on_config(config);
   }
+}
+
+int main() {
+  // test();
+  benchmark();
 }
 

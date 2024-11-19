@@ -12,6 +12,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC cubool)
 
 target_sources(${CMAKE_PROJECT_NAME} PUBLIC main.cpp)
 target_sources(${CMAKE_PROJECT_NAME} PUBLIC regular_path_query.cpp)
+target_sources(${CMAKE_PROJECT_NAME} PUBLIC benchmark.cpp)
 
 # load .mtx format utility
 add_subdirectory(fast_matrix_market)
