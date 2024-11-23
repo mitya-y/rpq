@@ -22,10 +22,18 @@ cuBool_Matrix regular_path_query(
     // vector of sparse graph matrices for each label
     const std::vector<cuBool_Matrix> &graph,
     const std::vector<cuBool_Index> &source_vertices,
+
     // vector of sparse automat matrices for each label
     const std::vector<cuBool_Matrix> &automat,
-    const std::vector<cuBool_Index> &start_states) {
+    const std::vector<cuBool_Index> &start_states,
+
+    // work with inverted labels
+    const std::vector<bool> &inversed_labels_input,
+    bool all_labels_are_inversed) {
   cuBool_Status status;
+
+  auto inversed_labels = inversed_labels_input;
+  inversed_labels.resize(std::max(graph.size(), automat.size()));
 
   // this is pointers to normal matrix.
   cuBool_Matrix frontier {}, symbol_frontier {}, next_frontier {};
@@ -37,15 +45,28 @@ cuBool_Matrix regular_path_query(
   std::vector<cuBool_Matrix> graph_transpsed;
   graph_transpsed.reserve(graph.size());
   for (auto label_matrix : graph) {
-    // TODO call new
+    if (label_matrix == nullptr) {
+      continue;
+    }
+
+    cuBool_Index nrows, ncols;
+    cuBool_Matrix_Nrows(label_matrix, &nrows);
+    cuBool_Matrix_Ncols(label_matrix, &ncols);
+
     graph_transpsed.emplace_back();
+    // maybe swap nrows and ncols?
+    cuBool_Matrix_New(&graph_transpsed.back(), nrows, ncols);
     cuBool_Matrix_Transpose(graph_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
   }
 
   // transpose automat matrices
   std::vector<cuBool_Matrix> automat_transpsed;
-  automat_transpsed.reserve(graph.size());
+  automat_transpsed.reserve(automat_transpsed.size());
   for (auto label_matrix : automat) {
+    if (label_matrix == nullptr) {
+      continue;
+    }
+
     cuBool_Index nrows, ncols;
     cuBool_Matrix_Nrows(label_matrix, &nrows);
     cuBool_Matrix_Ncols(label_matrix, &ncols);
@@ -98,10 +119,6 @@ cuBool_Matrix regular_path_query(
   while (states > 0) {
     std::swap(frontier, next_frontier);
 
-    // uint32_t nvals;
-    // cuBool_Matrix_Nvals(reacheble, &nvals);
-    // std::cout << "nvals = " << nvals << ", states = " << states << std::endl;
-
     // clear next_frontier
     cuBool_Matrix_Build(next_frontier, nullptr, nullptr, 0, CUBOOL_HINT_NO);
 
@@ -111,25 +128,27 @@ cuBool_Matrix regular_path_query(
       }
 
       // is this overwrite symbol_frontier? not :(
-      status = cuBool_MxM(symbol_frontier, automat_transpsed[i], frontier, CUBOOL_HINT_NO);
+      // status = cuBool_MxM(symbol_frontier, automat_transpsed[i], frontier, CUBOOL_HINT_NO);
+      cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transpsed[i];
+      status = cuBool_MxM(symbol_frontier, automat_matrix, frontier, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
 
+      // TODO: check states here
+
       // this must be mult with mask: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
-      status = cuBool_MxM(next_frontier, symbol_frontier, graph[i], CUBOOL_HINT_ACCUMULATE);
+      // status = cuBool_MxM(next_frontier, symbol_frontier, graph[i], CUBOOL_HINT_ACCUMULATE);
+      cuBool_Matrix graph_matrix = inversed_labels[i]
+          ? (all_labels_are_inversed ? graph[i] : graph_transpsed[i])
+          : (all_labels_are_inversed ? graph_transpsed[i] : graph[i]);
+      status = cuBool_MxM(next_frontier, symbol_frontier, graph_matrix, CUBOOL_HINT_ACCUMULATE);
       assert(status == CUBOOL_STATUS_SUCCESS);
 
       // apply mask
       cuBool_Matrix_ApplyInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
       std::swap(result, next_frontier);
-
-      // cuBool_Matrix_Nvals(symbol_frontier, &nvals);
-      // std::cout << "nvals symbol_frontier = " << nvals << std::endl;
-      // cuBool_Matrix_Nvals(next_frontier, &nvals);
-      // std::cout << "nvals next_frontier = " << nvals << std::endl;
     }
 
     // this must be accumulate with mask and save old value: reacheble += next_frontier & reacheble
-    //
     cuBool_Matrix_EWiseAdd(result, reacheble, next_frontier, CUBOOL_HINT_NO);
     std::swap(result, reacheble);
 
