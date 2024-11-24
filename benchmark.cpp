@@ -5,11 +5,18 @@
 #include <format>
 #include <ranges>
 
+#include <cuda.h>
+#include <thrust/system_error.h>
+#include <thrust/device_vector.h>
+#include <thrust/execution_policy.h>
+#include <cuda_profiler_api.h>
+
 #include <cubool.h>
 
 #include <fast_matrix_market/fast_matrix_market.hpp>
 
 #include "regular_path_query.hpp"
+#include "timer.hpp"
 
 #define LEN 512
 #define MAX_LABELS 16
@@ -26,7 +33,13 @@ struct MatrixData {
   bool loaded = false;
   int64_t nrows = 0, ncols = 0;
   std::vector<cuBool_Index> rows, cols;
-  std::vector<bool> vals;
+  cuBool_Index nvals = 0;
+
+  cuBool_Matrix matrix = nullptr;
+
+  double sizeMb() {
+    return (sizeof(cuBool_Index) * nvals * 2) / 1'000'000.0;
+  }
 };
 using Wikidata = std::vector<MatrixData>;
 
@@ -40,6 +53,8 @@ struct Query {
   std::vector<uint32_t> labels;
   std::vector<bool> inverse_lables;
   bool labels_inversed = false;
+
+  bool matrices_was_loaded = true;
 };
 
 static bool load_matrix(MatrixData &data, std::string_view filename) {
@@ -52,7 +67,9 @@ static bool load_matrix(MatrixData &data, std::string_view filename) {
     return false;
   }
 
-  fast_matrix_market::read_matrix_market_triplet(file, data.nrows, data.ncols, data.rows, data.cols, data.vals);
+  std::vector<bool> vals;
+  fast_matrix_market::read_matrix_market_triplet(file, data.nrows, data.ncols, data.rows, data.cols, vals);
+  data.nvals = vals.size();
   data.loaded = true;
 
   return true;
@@ -66,7 +83,7 @@ static bool create_matrix(cuBool_Matrix *matrix, const MatrixData &data) {
     return false;
   }
 
-  status = cuBool_Matrix_Build(*matrix, data.rows.data(), data.cols.data(), data.vals.size(), CUBOOL_HINT_NO);
+  status = cuBool_Matrix_Build(*matrix, data.rows.data(), data.cols.data(), data.nvals, CUBOOL_HINT_NO);
   if (status != CUBOOL_STATUS_SUCCESS) {
     return false;
   }
@@ -74,9 +91,11 @@ static bool create_matrix(cuBool_Matrix *matrix, const MatrixData &data) {
   return true;
 }
 
-static Wikidata load_matrices() {
+static Wikidata load_matrices(bool load_at_gpu = false) {
   Wikidata matrices(PROP_COUNT + 1);
 
+  Timer::mark();
+  std::cout << "loading at RAM\n";
   for (uint32_t query_number = 0; query_number < QUERY_COUNT; query_number++) {
     std::cout << "\rloaded query # " << query_number;
     std::flush(std::cout);
@@ -113,15 +132,40 @@ static Wikidata load_matrices() {
       load_matrix(matrices[label], filename);
     }
   }
-
   std::cout << "\r";
+  double elapsed = Timer::measure();
+  std::cout << "matrices loaded, time: " << elapsed << "s\n";
+
+  if (load_at_gpu) {
+    Timer::mark();
+    std::cout << "loading at VRAM\n";
+    for (int i = 0; i < matrices.size(); i++) {
+      uint32_t free_mem = parse_int(exec("python3 parse_mem.py"));
+
+      auto &data = matrices[i];
+      if (!data.loaded) {
+        continue;
+      }
+
+      create_matrix(&data.matrix, data);
+
+      uint32_t new_free_mem = parse_int(exec("python3 parse_mem.py"));
+      // std::println(std::cout, "query #{}: now used: {}, diff used: {}, actual size: {}",
+      //     i, new_free_mem, new_free_mem - free_mem, data.sizeMb());
+      std::cout << std::format("query #{}: now used: {}, diff used: {}, actual size: {}",
+          i, new_free_mem, new_free_mem - free_mem, data.sizeMb());
+    }
+    elapsed = Timer::measure();
+    std::cout << "matrices loaded at GPU, time: " << elapsed << "s\n";
+  }
+
   return matrices;
 }
 
-static bool load_query(Query &query, uint32_t query_number, const Wikidata &matrices) {
+static bool load_query(Query &query, uint32_t query_number, const Wikidata &matrices, bool preloaded) {
   std::string filename = std::format("{}{}/meta.txt", QUERIES_DIR, query_number);
   std::ifstream query_file(filename);
-  if (not query_file) {
+  if (!query_file) {
     std::cout << "skipped query " << query_number << ", file not exists\n";
     return false;
   }
@@ -169,10 +213,16 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
     uint32_t label = query.labels[i];
 
     // std::string filename = std::format("{}{}.txt", WIKIDATA_DIR, label);
-    if (not create_matrix(&query.graph[i], matrices[label])) {
-      throw std::runtime_error(("can not find matrix for label " +
-                                std::to_string(label)).c_str());
-      return false;
+    if (!preloaded) {
+      query.matrices_was_loaded = true;
+      if (not create_matrix(&query.graph[i], matrices[label])) {
+        throw std::runtime_error(("can not find matrix for label " +
+                                  std::to_string(label)).c_str());
+        return false;
+      }
+    } else {
+      query.matrices_was_loaded = false;
+      query.graph[i] = matrices[i].matrix;
     }
 
     filename = std::format("{}{}/{}.txt", QUERIES_DIR, query_number,
@@ -186,12 +236,12 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
   }
 
   if (source == std::numeric_limits<cuBool_Index>::max()) {
-    query.sourece_vertices = std::move(inv_src_verts);
-    query.start_states = std::vector {dest};
+    query.start_states = std::move(inv_src_verts);
+    query.sourece_vertices = std::vector {dest};
     query.labels_inversed = true;
   } else {
-    query.sourece_vertices = std::move(src_verts);
-    query.start_states = std::vector {source};
+    query.start_states = std::move(src_verts);
+    query.sourece_vertices = std::vector {source};
     query.labels_inversed = false;
   }
 
@@ -199,8 +249,10 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
 }
 
 static void clear_query(Query &query) {
-  for (auto matrix : query.graph) {
-    cuBool_Matrix_Free(matrix);
+  if (query.matrices_was_loaded) {
+    for (auto matrix : query.graph) {
+      cuBool_Matrix_Free(matrix);
+    }
   }
 
   for (auto matrix : query.automat) {
@@ -215,33 +267,81 @@ static void make_query(const Query &query) {
   cuBool_Matrix_Free(recheable);
 }
 
+static void save_to_bin(const Wikidata &wiki) {
+  std::ofstream f("save.bin", std::ios::binary);
+  size_t size = wiki.size();
+  f.write(reinterpret_cast<const char *>(&size), sizeof(size_t));
+  for (const auto &data : wiki) {
+    size = data.cols.size();
+    f.write(reinterpret_cast<const char *>(&size), sizeof(size_t));
+    f.write(reinterpret_cast<const char *>(data.cols.data()), size * sizeof(cuBool_Index));
+
+    size = data.rows.size();
+    f.write(reinterpret_cast<const char *>(&size), sizeof(size_t));
+    f.write(reinterpret_cast<const char *>(data.rows.data()), size * sizeof(cuBool_Index));
+
+    f.write(reinterpret_cast<const char *>(&data.loaded), sizeof(bool));
+
+    f.write(reinterpret_cast<const char *>(&data.ncols), sizeof(cuBool_Index));
+    f.write(reinterpret_cast<const char *>(&data.nrows), sizeof(cuBool_Index));
+    f.write(reinterpret_cast<const char *>(&data.nvals), sizeof(cuBool_Index));
+  }
+}
+
+static Wikidata load_from_bin() {
+  std::ifstream f("save.bin", std::ios::binary);
+  size_t size;
+  f.read(reinterpret_cast<char *>(&size), sizeof(size_t));
+  Wikidata wiki(size);
+  for (auto &data : wiki) {
+    f.read(reinterpret_cast<char *>(&size), sizeof(size_t));
+    data.cols.resize(size);
+    f.read(reinterpret_cast<char *>(data.cols.data()), size * sizeof(cuBool_Index));
+
+    f.read(reinterpret_cast<char *>(&size), sizeof(size_t));
+    data.rows.resize(size);
+    f.read(reinterpret_cast<char *>(data.rows.data()), size * sizeof(cuBool_Index));
+
+    f.read(reinterpret_cast<char *>(&data.loaded), sizeof(bool));
+
+    f.read(reinterpret_cast<char *>(&data.ncols), sizeof(cuBool_Index));
+    f.read(reinterpret_cast<char *>(&data.nrows), sizeof(cuBool_Index));
+    f.read(reinterpret_cast<char *>(&data.nvals), sizeof(cuBool_Index));
+  }
+
+  return wiki;
+}
 
 bool benchmark() {
   cuBool_Initialize(CUBOOL_HINT_NO);
 
-  struct timespec start, finish;
-
-  clock_gettime(CLOCK_MONOTONIC, &start);
-
-  auto matrices = load_matrices();
-
-  clock_gettime(CLOCK_MONOTONIC, &finish);
-  double elapsed = (finish.tv_sec - start.tv_sec) * 1000000.0 + (finish.tv_nsec - start.tv_nsec) / 1000.0;
-  elapsed /= 1'000'000;
-  std::cout << "matrices loaded, time: " << elapsed << "s\n";
+  bool preloading = false;
+  auto matrices = load_matrices(preloading);
+  // save_to_bin(matrices);
+  // return true;
+  // auto matrices = load_from_bin();
 
   for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
     Query query;
-    clock_gettime(CLOCK_MONOTONIC, &start);
 
-    load_query(query, query_number, matrices);
+    Timer::mark();
+    load_query(query, query_number, matrices, preloading);
+    double load_time = Timer::measure();
+
+    Timer::mark();
+    make_query(query);
+    double execute_time = Timer::measure();
+
+    Timer::mark();
     clear_query(query);
+    double clear_time = Timer::measure();
 
-    clock_gettime(CLOCK_MONOTONIC, &finish);
-    double elapsed = (finish.tv_sec - start.tv_sec) * 1000000.0 + (finish.tv_nsec - start.tv_nsec) / 1000.0;
-    elapsed /= 1'000'000;
-    std::cout << "query #" << query_number <<  ", time: " << elapsed << "s\n";
+    // std::println(std::cout, "query #{}; load time: {}, execute time: {}, clear time: {}",
+    //   query_number, load_time, execute_time, clear_time);
+    std::cout << std::format("query #{}; load time: {}, execute time: {}, clear time: {}\n",
+      query_number, load_time, execute_time, clear_time);
   }
+
 
   return true;
 }

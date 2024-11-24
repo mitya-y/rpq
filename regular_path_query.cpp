@@ -55,8 +55,10 @@ cuBool_Matrix regular_path_query(
 
     graph_transpsed.emplace_back();
     // maybe swap nrows and ncols?
-    cuBool_Matrix_New(&graph_transpsed.back(), nrows, ncols);
-    cuBool_Matrix_Transpose(graph_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
+    status = cuBool_Matrix_New(&graph_transpsed.back(), nrows, ncols);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+    status = cuBool_Matrix_Transpose(graph_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
+    assert(status == CUBOOL_STATUS_SUCCESS);
   }
 
   // transpose automat matrices
@@ -72,8 +74,10 @@ cuBool_Matrix regular_path_query(
     cuBool_Matrix_Ncols(label_matrix, &ncols);
 
     automat_transpsed.emplace_back();
-    cuBool_Matrix_New(&automat_transpsed.back(), nrows, ncols);
-    cuBool_Matrix_Transpose(automat_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
+    status = cuBool_Matrix_New(&automat_transpsed.back(), nrows, ncols);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+    status = cuBool_Matrix_Transpose(automat_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
+    assert(status == CUBOOL_STATUS_SUCCESS);
   }
 
   // get number of graph nodes
@@ -94,16 +98,21 @@ cuBool_Matrix regular_path_query(
 
   // this will be answer
   cuBool_Matrix reacheble {};
-  cuBool_Matrix_New(&reacheble, automat_nodes_number, graph_nodes_number);
+  status = cuBool_Matrix_New(&reacheble, automat_nodes_number, graph_nodes_number);
+  assert(status == CUBOOL_STATUS_SUCCESS);
 
   // allocate neccessary for algorithm matrices
-  cuBool_Matrix_New(&next_frontier, automat_nodes_number, graph_nodes_number);
-  cuBool_Matrix_New(&frontier, automat_nodes_number, graph_nodes_number);
-  cuBool_Matrix_New(&symbol_frontier, automat_nodes_number, graph_nodes_number);
+  status = cuBool_Matrix_New(&next_frontier, automat_nodes_number, graph_nodes_number);
+  assert(status == CUBOOL_STATUS_SUCCESS);
+  status = cuBool_Matrix_New(&frontier, automat_nodes_number, graph_nodes_number);
+  assert(status == CUBOOL_STATUS_SUCCESS);
+  status = cuBool_Matrix_New(&symbol_frontier, automat_nodes_number, graph_nodes_number);
+  assert(status == CUBOOL_STATUS_SUCCESS);
 
   // init start values of algorithm matricies
   for (const auto state : start_states) {
     for (const auto vert : source_vertices) {
+      assert(state < automat_nodes_number);
       assert(vert < graph_nodes_number);
       cuBool_Matrix_SetElement(next_frontier, state, vert);
       cuBool_Matrix_SetElement(reacheble, state, vert);
@@ -113,14 +122,16 @@ cuBool_Matrix regular_path_query(
   cuBool_Index states = source_vertices.size();
 
   cuBool_Matrix result;
-  cuBool_Matrix_New(&result, automat_nodes_number, graph_nodes_number);
+  status = cuBool_Matrix_New(&result, automat_nodes_number, graph_nodes_number);
+  assert(status == CUBOOL_STATUS_SUCCESS);
 
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
     std::swap(frontier, next_frontier);
 
     // clear next_frontier
-    cuBool_Matrix_Build(next_frontier, nullptr, nullptr, 0, CUBOOL_HINT_NO);
+    status = cuBool_Matrix_Build(next_frontier, nullptr, nullptr, 0, CUBOOL_HINT_NO);
+    assert(status == CUBOOL_STATUS_SUCCESS);
 
     for (int i = 0; i < label_number; i++) {
       if (graph[i] == nullptr || automat[i] == nullptr) {
@@ -144,12 +155,14 @@ cuBool_Matrix regular_path_query(
       assert(status == CUBOOL_STATUS_SUCCESS);
 
       // apply mask
-      cuBool_Matrix_ApplyInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
+      status = cuBool_Matrix_ApplyInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
+      assert(status == CUBOOL_STATUS_SUCCESS);
       std::swap(result, next_frontier);
     }
 
     // this must be accumulate with mask and save old value: reacheble += next_frontier & reacheble
-    cuBool_Matrix_EWiseAdd(result, reacheble, next_frontier, CUBOOL_HINT_NO);
+    status = cuBool_Matrix_EWiseAdd(result, reacheble, next_frontier, CUBOOL_HINT_NO);
+    assert(status == CUBOOL_STATUS_SUCCESS);
     std::swap(result, reacheble);
 
     cuBool_Matrix_Nvals(next_frontier, &states);
