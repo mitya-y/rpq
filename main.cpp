@@ -132,7 +132,7 @@ void test() {
 }
 
 int main() {
-  test();
-  // benchmark();
+  // test();
+  benchmark();
 }
 

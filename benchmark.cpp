@@ -4,6 +4,7 @@
 #include <fstream>
 #include <format>
 #include <ranges>
+#include <set>
 
 #include <cuda.h>
 #include <thrust/system_error.h>
@@ -216,8 +217,6 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
     if (!preloaded) {
       query.matrices_was_loaded = true;
       if (not create_matrix(&query.graph[i], matrices[label])) {
-        throw std::runtime_error(("can not find matrix for label " +
-                                  std::to_string(label)).c_str());
         return false;
       }
     } else {
@@ -229,8 +228,6 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
       query.inverse_lables[i] ? -(int)label : (int)label);
     MatrixData data;
     if (not load_matrix(data, filename) || not create_matrix(&query.automat[i], data)) {
-      throw std::runtime_error(("can not find matrix for label " +
-                                std::to_string(label)).c_str());
       return false;
     }
   }
@@ -251,12 +248,16 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
 static void clear_query(Query &query) {
   if (query.matrices_was_loaded) {
     for (auto matrix : query.graph) {
-      cuBool_Matrix_Free(matrix);
+      if (matrix != nullptr) {
+        cuBool_Matrix_Free(matrix);
+      }
     }
   }
 
   for (auto matrix : query.automat) {
-    cuBool_Matrix_Free(matrix);
+    if (matrix != nullptr) {
+      cuBool_Matrix_Free(matrix);
+    }
   }
 }
 
@@ -321,11 +322,26 @@ bool benchmark() {
   // return true;
   // auto matrices = load_from_bin();
 
+  std::set<uint32_t> too_big_queris = {115};
+
+  double total_load_time = 0;
+  double total_execute_time = 0;
+  double total_clear_time = 0;
+
   for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
     Query query;
 
+    if (too_big_queris.contains(query_number)) {
+      continue;
+    }
+
     Timer::mark();
-    load_query(query, query_number, matrices, preloading);
+    bool status = load_query(query, query_number, matrices, preloading);
+    if (!status) {
+      std::cout << std::format("query #{} skipped\n", query_number);
+      clear_query(query);
+      continue;
+    }
     double load_time = Timer::measure();
 
     Timer::mark();
@@ -340,8 +356,19 @@ bool benchmark() {
     //   query_number, load_time, execute_time, clear_time);
     std::cout << std::format("query #{}; load time: {}, execute time: {}, clear time: {}\n",
       query_number, load_time, execute_time, clear_time);
+
+    total_load_time += load_time;
+    total_execute_time += execute_time;
+    total_clear_time += clear_time;
+
+    // std::cout << std::format("free space after #3: {}\n", parse_int(exec("python3 parse_mem.py")));
   }
 
+  std::cout << "\n\n\n";
+  std::cout << std::format("total load time: {}, total execute time: {}, total clear time: {}\n",
+    total_load_time, total_execute_time, total_clear_time);
+
+  cuBool_Finalize();
 
   return true;
 }
