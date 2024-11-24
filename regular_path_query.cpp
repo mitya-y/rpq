@@ -45,6 +45,7 @@ cuBool_Matrix regular_path_query(
   std::vector<cuBool_Matrix> graph_transpsed;
   graph_transpsed.reserve(graph.size());
   for (auto label_matrix : graph) {
+    graph_transpsed.emplace_back();
     if (label_matrix == nullptr) {
       continue;
     }
@@ -53,9 +54,7 @@ cuBool_Matrix regular_path_query(
     cuBool_Matrix_Nrows(label_matrix, &nrows);
     cuBool_Matrix_Ncols(label_matrix, &ncols);
 
-    graph_transpsed.emplace_back();
-    // maybe swap nrows and ncols?
-    status = cuBool_Matrix_New(&graph_transpsed.back(), nrows, ncols);
+    status = cuBool_Matrix_New(&graph_transpsed.back(), ncols, nrows);
     assert(status == CUBOOL_STATUS_SUCCESS);
     status = cuBool_Matrix_Transpose(graph_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
     assert(status == CUBOOL_STATUS_SUCCESS);
@@ -63,8 +62,9 @@ cuBool_Matrix regular_path_query(
 
   // transpose automat matrices
   std::vector<cuBool_Matrix> automat_transpsed;
-  automat_transpsed.reserve(automat_transpsed.size());
+  automat_transpsed.reserve(automat.size());
   for (auto label_matrix : automat) {
+    automat_transpsed.emplace_back();
     if (label_matrix == nullptr) {
       continue;
     }
@@ -73,8 +73,7 @@ cuBool_Matrix regular_path_query(
     cuBool_Matrix_Nrows(label_matrix, &nrows);
     cuBool_Matrix_Ncols(label_matrix, &ncols);
 
-    automat_transpsed.emplace_back();
-    status = cuBool_Matrix_New(&automat_transpsed.back(), nrows, ncols);
+    status = cuBool_Matrix_New(&automat_transpsed.back(), ncols, nrows);
     assert(status == CUBOOL_STATUS_SUCCESS);
     status = cuBool_Matrix_Transpose(automat_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
     assert(status == CUBOOL_STATUS_SUCCESS);
@@ -172,6 +171,17 @@ cuBool_Matrix regular_path_query(
   cuBool_Matrix_Free(frontier);
   cuBool_Matrix_Free(symbol_frontier);
   cuBool_Matrix_Free(result);
+
+  for (cuBool_Matrix matrix : graph_transpsed) {
+    if (matrix != nullptr) {
+      cuBool_Matrix_Free(matrix);
+    }
+  }
+  for (cuBool_Matrix matrix : automat_transpsed) {
+    if (matrix != nullptr) {
+      cuBool_Matrix_Free(matrix);
+    }
+  }
 
   return reacheble;
 }

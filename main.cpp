@@ -82,6 +82,17 @@ void test_on_config(const Config &config) {
 
   cuBool_Matrix_Free(answer);
 
+  for (auto matrix : graph) {
+    if (matrix != nullptr) {
+      cuBool_Matrix_Free(matrix);
+    }
+  }
+  for (auto matrix : automat) {
+    if (matrix != nullptr) {
+      cuBool_Matrix_Free(matrix);
+    }
+  }
+
   cuBool_Finalize();
 }
 
