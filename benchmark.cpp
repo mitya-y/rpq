@@ -4,13 +4,8 @@
 #include <fstream>
 #include <format>
 #include <ranges>
+#include <print>
 #include <set>
-
-#include <cuda.h>
-#include <thrust/system_error.h>
-#include <thrust/device_vector.h>
-#include <thrust/execution_policy.h>
-#include <cuda_profiler_api.h>
 
 #include <cubool.h>
 
@@ -151,9 +146,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
       create_matrix(&data.matrix, data);
 
       uint32_t new_free_mem = parse_int(exec("python3 parse_mem.py"));
-      // std::println(std::cout, "query #{}: now used: {}, diff used: {}, actual size: {}",
-      //     i, new_free_mem, new_free_mem - free_mem, data.sizeMb());
-      std::cout << std::format("query #{}: now used: {}, diff used: {}, actual size: {}",
+      std::println("query #{}: now used: {}, diff used: {}, actual size: {}",
           i, new_free_mem, new_free_mem - free_mem, data.sizeMb());
     }
     elapsed = Timer::measure();
@@ -329,6 +322,7 @@ bool benchmark() {
   double total_clear_time = 0;
 
   for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
+  // for (uint32_t query_number = 124; query_number <= 124; query_number++) {
     Query query;
 
     if (too_big_queris.contains(query_number)) {
@@ -338,7 +332,7 @@ bool benchmark() {
     Timer::mark();
     bool status = load_query(query, query_number, matrices, preloading);
     if (!status) {
-      std::cout << std::format("query #{} skipped\n", query_number);
+      std::println("query #{} skipped", query_number);
       clear_query(query);
       continue;
     }
@@ -352,20 +346,18 @@ bool benchmark() {
     clear_query(query);
     double clear_time = Timer::measure();
 
-    // std::println(std::cout, "query #{}; load time: {}, execute time: {}, clear time: {}",
-    //   query_number, load_time, execute_time, clear_time);
-    std::cout << std::format("query #{}; load time: {}, execute time: {}, clear time: {}\n",
+    std::println("query #{}; load time: {}, execute time: {}, clear time: {}",
       query_number, load_time, execute_time, clear_time);
 
     total_load_time += load_time;
     total_execute_time += execute_time;
     total_clear_time += clear_time;
 
-    // std::cout << std::format("free space after #3: {}\n", parse_int(exec("python3 parse_mem.py")));
+    std::println("free space after #3: {}", parse_int(exec("python3 ../parse_mem.py")));
   }
 
   std::cout << "\n\n\n";
-  std::cout << std::format("total load time: {}, total execute time: {}, total clear time: {}\n",
+  std::println("total load time: {}, total execute time: {}, total clear time: {}\n",
     total_load_time, total_execute_time, total_clear_time);
 
   cuBool_Finalize();

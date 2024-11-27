@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string_view>
 #include <string>
+#include <memory>
 
 class Timer {
 private:
@@ -40,3 +41,4 @@ static inline uint32_t parse_int(const std::string &s) {
   std::from_chars(s.c_str(), s.c_str() + s.size(), value);
   return value;
 }
+

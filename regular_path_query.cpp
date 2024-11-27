@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cassert>
+#include <print>
 
 #include "regular_path_query.hpp"
 
@@ -35,18 +36,24 @@ cuBool_Matrix regular_path_query(
   auto inversed_labels = inversed_labels_input;
   inversed_labels.resize(std::max(graph.size(), automat.size()));
 
-  // this is pointers to normal matrix.
-  cuBool_Matrix frontier {}, symbol_frontier {}, next_frontier {};
-
-  cuBool_Index graph_nodes_number = 0;
-  cuBool_Index automat_nodes_number = 0;
+  for (uint32_t i = 0; i < inversed_labels.size(); i++) {
+    bool is_inverse = inversed_labels[i];
+    is_inverse ^= all_labels_are_inversed;
+    inversed_labels[i] = is_inverse;
+  }
 
   // transpose graph matrices
   std::vector<cuBool_Matrix> graph_transpsed;
   graph_transpsed.reserve(graph.size());
-  for (auto label_matrix : graph) {
+  for (uint32_t i = 0; i < graph.size(); i++) {
     graph_transpsed.emplace_back();
+
+    auto label_matrix = graph[i];
     if (label_matrix == nullptr) {
+      continue;
+    }
+
+    if (!inversed_labels[i]) {
       continue;
     }
 
@@ -79,6 +86,9 @@ cuBool_Matrix regular_path_query(
     assert(status == CUBOOL_STATUS_SUCCESS);
   }
 
+  cuBool_Index graph_nodes_number = 0;
+  cuBool_Index automat_nodes_number = 0;
+
   // get number of graph nodes
   for (auto label_matrix : graph) {
     if (label_matrix != nullptr) {
@@ -101,6 +111,7 @@ cuBool_Matrix regular_path_query(
   assert(status == CUBOOL_STATUS_SUCCESS);
 
   // allocate neccessary for algorithm matrices
+  cuBool_Matrix frontier {}, symbol_frontier {}, next_frontier {};
   status = cuBool_Matrix_New(&next_frontier, automat_nodes_number, graph_nodes_number);
   assert(status == CUBOOL_STATUS_SUCCESS);
   status = cuBool_Matrix_New(&frontier, automat_nodes_number, graph_nodes_number);
@@ -120,6 +131,7 @@ cuBool_Matrix regular_path_query(
 
   cuBool_Index states = source_vertices.size();
 
+  // temporary matrix for write result of cubool functions
   cuBool_Matrix result;
   status = cuBool_Matrix_New(&result, automat_nodes_number, graph_nodes_number);
   assert(status == CUBOOL_STATUS_SUCCESS);
@@ -137,8 +149,6 @@ cuBool_Matrix regular_path_query(
         continue;
       }
 
-      // is this overwrite symbol_frontier? not :(
-      // status = cuBool_MxM(symbol_frontier, automat_transpsed[i], frontier, CUBOOL_HINT_NO);
       cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transpsed[i];
       status = cuBool_MxM(symbol_frontier, automat_matrix, frontier, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
@@ -146,14 +156,11 @@ cuBool_Matrix regular_path_query(
       // TODO: check states here
 
       // this must be mult with mask: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
-      // status = cuBool_MxM(next_frontier, symbol_frontier, graph[i], CUBOOL_HINT_ACCUMULATE);
-      cuBool_Matrix graph_matrix = inversed_labels[i]
-          ? (all_labels_are_inversed ? graph[i] : graph_transpsed[i])
-          : (all_labels_are_inversed ? graph_transpsed[i] : graph[i]);
+      cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transpsed[i] : graph[i];
       status = cuBool_MxM(next_frontier, symbol_frontier, graph_matrix, CUBOOL_HINT_ACCUMULATE);
       assert(status == CUBOOL_STATUS_SUCCESS);
 
-      // apply mask
+      // apply invert mask
       status = cuBool_Matrix_ApplyInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
       std::swap(result, next_frontier);
@@ -167,6 +174,7 @@ cuBool_Matrix regular_path_query(
     cuBool_Matrix_Nvals(next_frontier, &states);
   }
 
+  // free matrix necessary for algorithm
   cuBool_Matrix_Free(next_frontier);
   cuBool_Matrix_Free(frontier);
   cuBool_Matrix_Free(symbol_frontier);
