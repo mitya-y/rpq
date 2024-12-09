@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>
 #include <time.h>
 #include <iostream>
@@ -45,6 +46,8 @@ struct Query {
 
   std::vector<cuBool_Index> sourece_vertices;
   std::vector<cuBool_Index> start_states;
+
+  std::vector<cuBool_Index> final_states;
 
   std::vector<uint32_t> labels;
   std::vector<bool> inverse_lables;
@@ -227,10 +230,12 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
 
   if (source == std::numeric_limits<cuBool_Index>::max()) {
     query.start_states = std::move(inv_src_verts);
+    query.final_states = std::move(src_verts);
     query.sourece_vertices = std::vector {dest};
     query.labels_inversed = true;
   } else {
     query.start_states = std::move(src_verts);
+    query.final_states = std::move(inv_src_verts);
     query.sourece_vertices = std::vector {source};
     query.labels_inversed = false;
   }
@@ -254,56 +259,29 @@ static void clear_query(Query &query) {
   }
 }
 
-static void make_query(const Query &query) {
+static uint32_t make_query(const Query &query) {
   auto recheable = regular_path_query(query.graph, query.sourece_vertices,
                                       query.automat, query.start_states,
                                       query.inverse_lables, query.labels_inversed);
+  cuBool_Vector P, F;
+
+  cuBool_Index automat_rows, graph_rows;
+  cuBool_Matrix_Nrows(query.graph.front(), &graph_rows);
+  cuBool_Matrix_Nrows(query.automat.front(), &automat_rows);
+
+  cuBool_Vector_New(&P, graph_rows);
+  cuBool_Vector_New(&F, automat_rows);
+
+  cuBool_Vector_Build(F, query.final_states.data(), query.final_states.size(), CUBOOL_HINT_NO);
+  cuBool_VxM(P, F, recheable, CUBOOL_HINT_NO);
+  uint32_t answer = 0;
+  cuBool_Vector_Nvals(P, &answer);
+
+  cuBool_Vector_Free(P);
+  cuBool_Vector_Free(F);
   cuBool_Matrix_Free(recheable);
-}
 
-static void save_to_bin(const Wikidata &wiki) {
-  std::ofstream f("save.bin", std::ios::binary);
-  size_t size = wiki.size();
-  f.write(reinterpret_cast<const char *>(&size), sizeof(size_t));
-  for (const auto &data : wiki) {
-    size = data.cols.size();
-    f.write(reinterpret_cast<const char *>(&size), sizeof(size_t));
-    f.write(reinterpret_cast<const char *>(data.cols.data()), size * sizeof(cuBool_Index));
-
-    size = data.rows.size();
-    f.write(reinterpret_cast<const char *>(&size), sizeof(size_t));
-    f.write(reinterpret_cast<const char *>(data.rows.data()), size * sizeof(cuBool_Index));
-
-    f.write(reinterpret_cast<const char *>(&data.loaded), sizeof(bool));
-
-    f.write(reinterpret_cast<const char *>(&data.ncols), sizeof(cuBool_Index));
-    f.write(reinterpret_cast<const char *>(&data.nrows), sizeof(cuBool_Index));
-    f.write(reinterpret_cast<const char *>(&data.nvals), sizeof(cuBool_Index));
-  }
-}
-
-static Wikidata load_from_bin() {
-  std::ifstream f("save.bin", std::ios::binary);
-  size_t size;
-  f.read(reinterpret_cast<char *>(&size), sizeof(size_t));
-  Wikidata wiki(size);
-  for (auto &data : wiki) {
-    f.read(reinterpret_cast<char *>(&size), sizeof(size_t));
-    data.cols.resize(size);
-    f.read(reinterpret_cast<char *>(data.cols.data()), size * sizeof(cuBool_Index));
-
-    f.read(reinterpret_cast<char *>(&size), sizeof(size_t));
-    data.rows.resize(size);
-    f.read(reinterpret_cast<char *>(data.rows.data()), size * sizeof(cuBool_Index));
-
-    f.read(reinterpret_cast<char *>(&data.loaded), sizeof(bool));
-
-    f.read(reinterpret_cast<char *>(&data.ncols), sizeof(cuBool_Index));
-    f.read(reinterpret_cast<char *>(&data.nrows), sizeof(cuBool_Index));
-    f.read(reinterpret_cast<char *>(&data.nvals), sizeof(cuBool_Index));
-  }
-
-  return wiki;
+  return answer;
 }
 
 bool benchmark() {
@@ -321,10 +299,14 @@ bool benchmark() {
   double total_execute_time = 0;
   double total_clear_time = 0;
 
+  std::fstream _results_file("result.txt", std::ofstream::out);
+  _results_file.close();
+
   for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
   // for (uint32_t query_number = 124; query_number <= 124; query_number++) {
     Query query;
 
+    std::fstream results_file("result.txt", std::ofstream::out | std::ofstream::app);
     if (too_big_queris.contains(query_number)) {
       continue;
     }
@@ -339,15 +321,16 @@ bool benchmark() {
     double load_time = Timer::measure();
 
     Timer::mark();
-    make_query(query);
+    auto result = make_query(query);
+    results_file << query_number << ' ' << result << '\n';
     double execute_time = Timer::measure();
 
     Timer::mark();
     clear_query(query);
     double clear_time = Timer::measure();
 
-    std::println("query #{}; load time: {}, execute time: {}, clear time: {}",
-      query_number, load_time, execute_time, clear_time);
+    std::println("query #{}; load time: {}, execute time: {}, clear time: {}, result: {}",
+      query_number, load_time, execute_time, clear_time, result);
 
     total_load_time += load_time;
     total_execute_time += execute_time;
