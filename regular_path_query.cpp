@@ -1,10 +1,12 @@
 #include <iostream>
 #include <cassert>
 #include <print>
+#include <set>
 
 #include "regular_path_query.hpp"
+#include "cubool.h"
 
-void print_cubool_matrix(cuBool_Matrix matrix, std::string name) {
+void print_cubool_matrix(cuBool_Matrix matrix, std::string name, bool print_full) {
   if (name != "") {
     std::cout << name << std::endl;
   }
@@ -14,10 +16,52 @@ void print_cubool_matrix(cuBool_Matrix matrix, std::string name) {
   std::vector<cuBool_Index> rows(nvals), cols(nvals);
   cuBool_Matrix_ExtractPairs(matrix, rows.data(), cols.data(), &nvals);
 
-  for (int i = 0; i < nvals; i++) {
-    printf("(%d, %d)\n", rows[i], cols[i]);
+  if (!print_full) {
+    for (int i = 0; i < nvals; i++) {
+      printf("(%d, %d)\n", rows[i], cols[i]);
+    }
+    return;
   }
+
+  std::set<std::pair<cuBool_Index, cuBool_Index>> indexes {};
+  for (int i = 0; i < nvals; i++) {
+    indexes.insert({rows[i], cols[i]});
+  }
+
+  cuBool_Index nrows, ncols;
+  cuBool_Matrix_Ncols(matrix, &ncols);
+  cuBool_Matrix_Nrows(matrix, &nrows);
+
+  for (int i = 0; i < nrows; i++) {
+    for (int j = 0; j < ncols; j++) {
+      std::cout << (indexes.contains({i, j}) ? '1' : '0') << ' ';
+    }
+    std::cout << "\n";
+  }
+
 }
+
+void print_cubool_vector(cuBool_Vector vector, std::string name) {
+  if (name != "") {
+    std::cout << name << ": ";
+  }
+
+  cuBool_Index nvals;
+  cuBool_Vector_Nvals(vector, &nvals);
+  std::vector<cuBool_Index> row(nvals);
+  cuBool_Vector_ExtractValues(vector, row.data(), &nvals);
+
+  printf("{");
+  for (int i = 0; i < nvals; i++) {
+    printf("%d", row[i]);
+    if (i != nvals - 1) {
+      printf(", ");
+    }
+  }
+  printf("}, size = %d\n", nvals);
+}
+
+
 
 cuBool_Matrix regular_path_query(
     // vector of sparse graph matrices for each label

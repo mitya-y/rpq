@@ -2,7 +2,9 @@
 
 #include <cubool.h>
 
-void print_cubool_matrix(cuBool_Matrix matrix, std::string name = "");
+void print_cubool_matrix(cuBool_Matrix matrix, std::string name = "", bool print_full = false);
+void print_cubool_vector(cuBool_Vector vector, std::string name = "");
+
 
 cuBool_Matrix regular_path_query(
     // vector of sparse graph matrices for each label
