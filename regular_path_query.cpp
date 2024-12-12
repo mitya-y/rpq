@@ -205,7 +205,7 @@ cuBool_Matrix regular_path_query(
       assert(status == CUBOOL_STATUS_SUCCESS);
 
       // apply invert mask
-      status = cuBool_Matrix_ApplyInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
+      status = cuBool_Matrix_EWiseMulInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
       std::swap(result, next_frontier);
     }
