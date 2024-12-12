@@ -302,8 +302,8 @@ bool benchmark() {
   std::fstream _results_file("result.txt", std::ofstream::out);
   _results_file.close();
 
-  for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
-  // for (uint32_t query_number = 124; query_number <= 124; query_number++) {
+  // for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
+  for (uint32_t query_number = 1; query_number < 521; query_number++) {
     Query query;
 
     std::fstream results_file("result.txt", std::ofstream::out | std::ofstream::app);
