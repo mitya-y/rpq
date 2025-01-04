@@ -24,7 +24,7 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Download utilities
+    - name: Setup enviroment
       run: |
         sudo apt update
         sudo apt install gcc-14
@@ -41,7 +41,7 @@ jobs:
               -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}     \
               -DRPQ_RUN_ON_CPU=ON
 
-    - name: Build and generate compile_commands
+    - name: Build
       run: |
         cmake --build build -j10
 
@@ -49,7 +49,18 @@ jobs:
       run: |
         ./build/rpq
 
-    # - name: clang-format test
-    #   run: |
-    #     cp .CI/check-clang-format.py .
-    #     python3 check-clang-format.py
+    - name: clang-format test
+      run: |
+        export RPQ_SOURCE_FILES=(
+          main.cpp
+          regular_path_query.cpp
+          benchmark.cpp
+          timer.hpp
+          regular_path_query.hpp
+        )
+        for file in ${RPQ_SOURCE_FILES[*]}; do  \
+          echo $file: &&                        \
+          clang-format $file > formatted.txt && \
+          (diff $file formatted.txt || true);   \
+        done
+        unset RPQ_SOURCE_FILES
