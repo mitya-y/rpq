@@ -198,7 +198,12 @@ bool test() {
   return true;
 }
 
-int main() {
-  exit(test() ? 0 : -1);
-  // benchmark();
+int main(int argc, char **argv) {
+  if (argc < 2 || std::string_view("test") == argv[1]) {
+    exit(test() ? 0 : -1);
+  } else if (argc >= 2 && std::string_view("bench") == argv[1]) {
+    benchmark();
+  } else {
+    std::println("unexpceted argument");
+  }
 }

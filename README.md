@@ -1,9 +1,10 @@
 ## GPU-based matrices implementation of Regular Path Query algorithm
 
-# build
- git submodule update --init --recursive \
- ./build.sh
+# Configure and build
+git submodule update --init --recursive  \
+cmake -B build -S . -DRPQ_RUN_ON_CPU=OFF \
+cmake --build build
 
-# run tests
- cd build \
- ./rpq
+# Run tests
+./build/rpq test
+

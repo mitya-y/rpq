@@ -47,7 +47,7 @@ jobs:
 
     - name: Run tests
       run: |
-        ./build/rpq
+        ./build/rpq test
 
     - name: clang-format test
       run: |
