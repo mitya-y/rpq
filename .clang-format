@@ -1,0 +1,12 @@
+BasedOnStyle: Google
+AccessModifierOffset: -2
+TabWidth: 2
+IndentWidth: 2
+ContinuationIndentWidth: 2
+ColumnLimit: 100
+QualifierAlignment: Custom
+QualifierOrder: ['inline', 'static', 'const', 'volatile', 'type']
+SeparateDefinitionBlocks: Always
+IncludeBlocks: Preserve
+SpacesInContainerLiterals: true
+SpaceBeforeCpp11BracedList: true

@@ -1,11 +1,11 @@
-#include <cstdint>
 #include <stdio.h>
 #include <time.h>
-#include <iostream>
-#include <fstream>
+#include <cstdint>
 #include <format>
-#include <ranges>
+#include <fstream>
+#include <iostream>
 #include <print>
+#include <ranges>
 #include <set>
 
 #include <cubool.h>
@@ -34,10 +34,9 @@ struct MatrixData {
 
   cuBool_Matrix matrix = nullptr;
 
-  double sizeMb() {
-    return (sizeof(cuBool_Index) * nvals * 2) / 1'000'000.0;
-  }
+  double sizeMb() { return (sizeof(cuBool_Index) * nvals * 2) / 1'000'000.0; }
 };
+
 using Wikidata = std::vector<MatrixData>;
 
 struct Query {
@@ -67,7 +66,8 @@ static bool load_matrix(MatrixData &data, std::string_view filename) {
   }
 
   std::vector<bool> vals;
-  fast_matrix_market::read_matrix_market_triplet(file, data.nrows, data.ncols, data.rows, data.cols, vals);
+  fast_matrix_market::read_matrix_market_triplet(file, data.nrows, data.ncols, data.rows, data.cols,
+                                                 vals);
   data.nvals = vals.size();
   data.loaded = true;
 
@@ -82,7 +82,8 @@ static bool create_matrix(cuBool_Matrix *matrix, const MatrixData &data) {
     return false;
   }
 
-  status = cuBool_Matrix_Build(*matrix, data.rows.data(), data.cols.data(), data.nvals, CUBOOL_HINT_NO);
+  status =
+    cuBool_Matrix_Build(*matrix, data.rows.data(), data.cols.data(), data.nvals, CUBOOL_HINT_NO);
   if (status != CUBOOL_STATUS_SUCCESS) {
     return false;
   }
@@ -149,8 +150,8 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
       create_matrix(&data.matrix, data);
 
       uint32_t new_free_mem = parse_int(exec("python3 parse_mem.py"));
-      std::println("query #{}: now used: {}, diff used: {}, actual size: {}",
-          i, new_free_mem, new_free_mem - free_mem, data.sizeMb());
+      std::println("query #{}: now used: {}, diff used: {}, actual size: {}", i, new_free_mem,
+                   new_free_mem - free_mem, data.sizeMb());
     }
     elapsed = Timer::measure();
     std::cout << "matrices loaded at GPU, time: " << elapsed << "s\n";
@@ -159,7 +160,8 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
   return matrices;
 }
 
-static bool load_query(Query &query, uint32_t query_number, const Wikidata &matrices, bool preloaded) {
+static bool load_query(Query &query, uint32_t query_number, const Wikidata &matrices,
+                       bool preloaded) {
   std::string filename = std::format("{}{}/meta.txt", QUERIES_DIR, query_number);
   std::ifstream query_file(filename);
   if (!query_file) {
@@ -221,7 +223,7 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
     }
 
     filename = std::format("{}{}/{}.txt", QUERIES_DIR, query_number,
-      query.inverse_lables[i] ? -(int)label : (int)label);
+                           query.inverse_lables[i] ? -(int)label : (int)label);
     MatrixData data;
     if (not load_matrix(data, filename) || not create_matrix(&query.automat[i], data)) {
       return false;
@@ -260,9 +262,9 @@ static void clear_query(Query &query) {
 }
 
 static uint32_t make_query(const Query &query) {
-  auto recheable = regular_path_query(query.graph, query.sourece_vertices,
-                                      query.automat, query.start_states,
-                                      query.inverse_lables, query.labels_inversed);
+  auto recheable =
+    regular_path_query(query.graph, query.sourece_vertices, query.automat, query.start_states,
+                       query.inverse_lables, query.labels_inversed);
   cuBool_Vector P, F;
 
   cuBool_Index automat_rows, graph_rows;
@@ -330,7 +332,7 @@ bool benchmark() {
     double clear_time = Timer::measure();
 
     std::println("query #{}; load time: {}, execute time: {}, clear time: {}, result: {}",
-      query_number, load_time, execute_time, clear_time, result);
+                 query_number, load_time, execute_time, clear_time, result);
 
     total_load_time += load_time;
     total_execute_time += execute_time;
@@ -341,10 +343,9 @@ bool benchmark() {
 
   std::cout << "\n\n\n";
   std::println("total load time: {}, total execute time: {}, total clear time: {}\n",
-    total_load_time, total_execute_time, total_clear_time);
+               total_load_time, total_execute_time, total_clear_time);
 
   cuBool_Finalize();
 
   return true;
 }
-

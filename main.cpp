@@ -1,14 +1,13 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
-#include <string_view>
-#include <print>
 #include <numeric>
+#include <print>
 #include <set>
+#include <string_view>
 
 #include <fast_matrix_market/fast_matrix_market.hpp>
 
-#include "cubool.h"
 #include "regular_path_query.hpp"
 
 struct Config {
@@ -156,32 +155,32 @@ bool test_on_config(const Config &config) {
 bool test() {
   std::vector<Config> configs {
     {
-      .graph_data = { "test_data/example/graph_a.mtx", "test_data/example/graph_b.mtx" },
-      .automat_data = { "test_data/example/automat_a.mtx", "test_data/example/automat_b.mtx" },
+      .graph_data = {"test_data/example/graph_a.mtx", "test_data/example/graph_b.mtx"},
+      .automat_data = {"test_data/example/automat_a.mtx", "test_data/example/automat_b.mtx"},
       .sources = {1},
       .expexted = "test_data/example/expected.txt",
     },
     {
-      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
-      .automat_data { "test_data/1_a.mtx", "" },
+      .graph_data = {"test_data/a.mtx", "test_data/b.mtx"},
+      .automat_data {"test_data/1_a.mtx", ""},
       .sources = {1},
       .expexted = "test_data/1_expected.txt",
     },
     {
-      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
-      .automat_data { "test_data/2_a.mtx", "test_data/2_b.mtx" },
+      .graph_data = {"test_data/a.mtx", "test_data/b.mtx"},
+      .automat_data {"test_data/2_a.mtx", "test_data/2_b.mtx"},
       .sources = {2},
       .expexted = "test_data/2_expected.txt",
     },
     {
-      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
-      .automat_data { "test_data/3_a.mtx", "test_data/3_b.mtx" },
+      .graph_data = {"test_data/a.mtx", "test_data/b.mtx"},
+      .automat_data {"test_data/3_a.mtx", "test_data/3_b.mtx"},
       .sources = {3, 6},
       .expexted = "test_data/3_expected.txt",
     },
     {
-      .graph_data = { "test_data/a.mtx", "test_data/b.mtx" },
-      .automat_data { "", "test_data/4_b.mtx" },
+      .graph_data = {"test_data/a.mtx", "test_data/b.mtx"},
+      .automat_data {"", "test_data/4_b.mtx"},
       .sources = {4},
       .expexted = "test_data/4_expected.txt",
     },
@@ -203,4 +202,3 @@ int main() {
   exit(test() ? 0 : -1);
   // benchmark();
 }
-

@@ -1,10 +1,10 @@
-#include <iostream>
 #include <cassert>
+#include <iostream>
 #include <print>
 #include <set>
 
-#include "regular_path_query.hpp"
 #include "cubool.h"
+#include "regular_path_query.hpp"
 
 void print_cubool_matrix(cuBool_Matrix matrix, std::string name, bool print_full) {
   if (name != "") {
@@ -38,7 +38,6 @@ void print_cubool_matrix(cuBool_Matrix matrix, std::string name, bool print_full
     }
     std::cout << "\n";
   }
-
 }
 
 void print_cubool_vector(cuBool_Vector vector, std::string name) {
@@ -61,20 +60,15 @@ void print_cubool_vector(cuBool_Vector vector, std::string name) {
   printf("}, size = %d\n", nvals);
 }
 
-
-
 cuBool_Matrix regular_path_query(
-    // vector of sparse graph matrices for each label
-    const std::vector<cuBool_Matrix> &graph,
-    const std::vector<cuBool_Index> &source_vertices,
+  // vector of sparse graph matrices for each label
+  const std::vector<cuBool_Matrix> &graph, const std::vector<cuBool_Index> &source_vertices,
 
-    // vector of sparse automat matrices for each label
-    const std::vector<cuBool_Matrix> &automat,
-    const std::vector<cuBool_Index> &start_states,
+  // vector of sparse automat matrices for each label
+  const std::vector<cuBool_Matrix> &automat, const std::vector<cuBool_Index> &start_states,
 
-    // work with inverted labels
-    const std::vector<bool> &inversed_labels_input,
-    bool all_labels_are_inversed) {
+  // work with inverted labels
+  const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed) {
   cuBool_Status status;
 
   auto inversed_labels = inversed_labels_input;
