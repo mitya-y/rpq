@@ -1,0 +1,55 @@
+name: Compile, run tests and check code style
+
+on:
+  push:
+    branches: [ "master", "test-ci" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        os: [ubuntu-24.04]
+        c_compiler: [gcc-14]
+        cpp_compiler: [g++-14]
+        build_type: [Release, Debug]
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Download utilities
+      run: |
+        sudo apt update
+        sudo apt install gcc-14
+        sudo apt install g++-14
+        sudo apt install cmake
+        sudo apt install clang-format
+
+    - name: Configure CMake
+      run: |
+        cd ${{ github.workspace }}
+        cmake -B build -S .                                   \
+              -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+              -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}     \
+              -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}     \
+              -DRPQ_RUN_ON_CPU=ON
+
+    - name: Build and generate compile_commands
+      run: |
+        cmake --build build -j10
+
+    - name: Run tests
+      run: |
+        ./build/rpq
+
+    # - name: clang-format test
+    #   run: |
+    #     cp .CI/check-clang-format.py .
+    #     python3 check-clang-format.py
