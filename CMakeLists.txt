@@ -6,6 +6,13 @@ project(rpq)
 
 add_executable(${CMAKE_PROJECT_NAME} "")
 
+option(RPQ_RUN_ON_CPU "Run RPQ algorithm on CPU" OFF)
+
+if(RPQ_RUN_ON_CPU)
+    set(CUBOOL_WITH_CUDA OFF)
+    set(CUBOOL_WITH_SEQUENTIAL ON)
+endif()
+
 add_subdirectory(cuBool)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC cuBool/cubool/include/cubool)

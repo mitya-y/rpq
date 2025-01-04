@@ -7,7 +7,6 @@
 #include <set>
 
 #include <fast_matrix_market/fast_matrix_market.hpp>
-#include <vector_types.h>
 
 #include "cubool.h"
 #include "regular_path_query.hpp"
