@@ -11,6 +11,7 @@ cuBool_Matrix regular_path_query(
   // vector of sparse automat matrices for each label
   const std::vector<cuBool_Matrix> &automat, const std::vector<cuBool_Index> &start_states,
 
-  const std::vector<bool> &inversed_labels = {}, bool all_labels_are_inversed = false);
+  const std::vector<bool> &inversed_labels = {}, bool all_labels_are_inversed = false,
+  std::ostream &out = std::cout);
 
 bool benchmark();

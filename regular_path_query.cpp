@@ -5,6 +5,9 @@
 
 #include "cubool.h"
 #include "regular_path_query.hpp"
+#include "timer.hpp"
+
+static Timer rpq_timer {};
 
 void print_cubool_matrix(cuBool_Matrix matrix, std::string name, bool print_full) {
   if (name != "") {
@@ -60,16 +63,19 @@ void print_cubool_vector(cuBool_Vector vector, std::string name) {
   printf("}, size = %d\n", nvals);
 }
 
+
 cuBool_Matrix regular_path_query(
   // vector of sparse graph matrices for each label
   const std::vector<cuBool_Matrix> &graph, const std::vector<cuBool_Index> &source_vertices,
-
   // vector of sparse automat matrices for each label
   const std::vector<cuBool_Matrix> &automat, const std::vector<cuBool_Index> &start_states,
-
   // work with inverted labels
-  const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed) {
+  const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed,
+  // for debug
+  std::ostream &out) {
   cuBool_Status status;
+
+  rpq_timer.mark();
 
   auto inversed_labels = inversed_labels_input;
   inversed_labels.resize(std::max(graph.size(), automat.size()));
@@ -174,6 +180,8 @@ cuBool_Matrix regular_path_query(
   status = cuBool_Matrix_New(&result, automat_nodes_number, graph_nodes_number);
   assert(status == CUBOOL_STATUS_SUCCESS);
 
+  auto load_time = rpq_timer.measure();
+
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
     std::swap(frontier, next_frontier);
@@ -193,11 +201,11 @@ cuBool_Matrix regular_path_query(
 
       // TODO: check states here
 
-      // this must be mult with mask: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
+      // we want: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
+      // mult 2 matrices
       cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transpsed[i] : graph[i];
       status = cuBool_MxM(next_frontier, symbol_frontier, graph_matrix, CUBOOL_HINT_ACCUMULATE);
       assert(status == CUBOOL_STATUS_SUCCESS);
-
       // apply invert mask
       status = cuBool_Matrix_EWiseMulInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
@@ -211,6 +219,8 @@ cuBool_Matrix regular_path_query(
 
     cuBool_Matrix_Nvals(next_frontier, &states);
   }
+
+  std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
 
   // free matrix necessary for algorithm
   cuBool_Matrix_Free(next_frontier);

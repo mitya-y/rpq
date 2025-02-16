@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <cstdint>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -15,13 +16,10 @@
 #include "regular_path_query.hpp"
 #include "timer.hpp"
 
-#define LEN 512
-#define MAX_LABELS 16
 #define RUNS 1
 
-#define WIKIDATA_DIR "/home/mitya/Wikidata/"
-#define QUERIES_DIR "/home/mitya/Queries/"
-#define RESULTS_DIR "Results/"
+#define WIKIDATA_DIR "/home/mitya/Documents/wiki-dataset/"
+#define QUERIES_LOGS "queries_logs"
 
 #define QUERY_COUNT 660
 #define PROP_COUNT 1395
@@ -54,6 +52,8 @@ struct Query {
 
   bool matrices_was_loaded = true;
 };
+
+static Timer bench_timer {};
 
 static bool load_matrix(MatrixData &data, std::string_view filename) {
   if (data.loaded) {
@@ -94,13 +94,13 @@ static bool create_matrix(cuBool_Matrix *matrix, const MatrixData &data) {
 static Wikidata load_matrices(bool load_at_gpu = false) {
   Wikidata matrices(PROP_COUNT + 1);
 
-  Timer::mark();
+  bench_timer.mark();
   std::cout << "loading at RAM\n";
   for (uint32_t query_number = 0; query_number < QUERY_COUNT; query_number++) {
     std::cout << "\rloaded query # " << query_number;
     std::flush(std::cout);
 
-    std::string filename = std::format("{}{}/meta.txt", QUERIES_DIR, query_number);
+    std::string filename = std::format("{}{}{}/meta.txt", WIKIDATA_DIR, "Queries/", query_number);
     std::ifstream query_file(filename);
     if (not query_file) {
       continue;
@@ -128,16 +128,16 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
       query_file >> label;
       label = std::abs(label);
 
-      std::string filename = std::format("{}{}.txt", WIKIDATA_DIR, label);
+      std::string filename = std::format("{}{}{}.txt", WIKIDATA_DIR, "Wikidata/", label);
       load_matrix(matrices[label], filename);
     }
   }
   std::cout << "\r";
-  double elapsed = Timer::measure();
+  double elapsed = bench_timer.measure();
   std::cout << "matrices loaded, time: " << elapsed << "s\n";
 
   if (load_at_gpu) {
-    Timer::mark();
+    bench_timer.mark();
     std::cout << "loading at VRAM\n";
     for (int i = 0; i < matrices.size(); i++) {
       uint32_t free_mem = parse_int(exec("python3 parse_mem.py"));
@@ -153,7 +153,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
       std::println("query #{}: now used: {}, diff used: {}, actual size: {}", i, new_free_mem,
                    new_free_mem - free_mem, data.sizeMb());
     }
-    elapsed = Timer::measure();
+    elapsed = bench_timer.measure();
     std::cout << "matrices loaded at GPU, time: " << elapsed << "s\n";
   }
 
@@ -162,17 +162,17 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
 
 static bool load_query(Query &query, uint32_t query_number, const Wikidata &matrices,
                        bool preloaded) {
-  std::string filename = std::format("{}{}/meta.txt", QUERIES_DIR, query_number);
+  std::string filename = std::format("{}{}{}/meta.txt", WIKIDATA_DIR, "Queries/", query_number);
   std::ifstream query_file(filename);
   if (!query_file) {
-    std::cout << "skipped query " << query_number << ", file not exists\n";
+    std::cerr << "skipped query " << query_number << ", file not exists\n";
     return false;
   }
 
   cuBool_Index source = 0, dest = 0;
   query_file >> source >> dest;
   if (source == 0 && dest == 0) {
-    std::cout << "skipped query " << query_number << ", sourse and dest is 0\n";
+    std::cerr << "skipped query " << query_number << ", sourse and dest is 0\n";
     return false;
   }
   source--;
@@ -211,7 +211,7 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
   for (int i = 0; i < labels_number; i++) {
     uint32_t label = query.labels[i];
 
-    // std::string filename = std::format("{}{}.txt", WIKIDATA_DIR, label);
+    // std::string filename = std::format("{}{}{}.txt", WIKIDATA_DIR, "Wikidata/", label);
     if (!preloaded) {
       query.matrices_was_loaded = true;
       if (not create_matrix(&query.graph[i], matrices[label])) {
@@ -222,7 +222,7 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
       query.graph[i] = matrices[i].matrix;
     }
 
-    filename = std::format("{}{}/{}.txt", QUERIES_DIR, query_number,
+    filename = std::format("{}{}{}/{}.txt", WIKIDATA_DIR, "Queries/", query_number,
                            query.inverse_lables[i] ? -(int)label : (int)label);
     MatrixData data;
     if (not load_matrix(data, filename) || not create_matrix(&query.automat[i], data)) {
@@ -261,16 +261,19 @@ static void clear_query(Query &query) {
   }
 }
 
-static uint32_t make_query(const Query &query) {
+static uint32_t make_query(const Query &query, uint32_t query_number) {
+  std::string filename = std::format("{}/{}.txt", QUERIES_LOGS, query_number);
+  std::ofstream log_file(filename);
+
   auto recheable =
     regular_path_query(query.graph, query.sourece_vertices, query.automat, query.start_states,
-                       query.inverse_lables, query.labels_inversed);
-  cuBool_Vector P, F;
+                       query.inverse_lables, query.labels_inversed, log_file);
 
   cuBool_Index automat_rows, graph_rows;
   cuBool_Matrix_Nrows(query.graph.front(), &graph_rows);
   cuBool_Matrix_Nrows(query.automat.front(), &automat_rows);
 
+  cuBool_Vector P, F;
   cuBool_Vector_New(&P, graph_rows);
   cuBool_Vector_New(&F, automat_rows);
 
@@ -304,6 +307,8 @@ bool benchmark() {
   std::fstream _results_file("result.txt", std::ofstream::out);
   _results_file.close();
 
+  std::filesystem::create_directory(QUERIES_LOGS);
+
   // for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
   for (uint32_t query_number = 1; query_number < 521; query_number++) {
     Query query;
@@ -313,23 +318,23 @@ bool benchmark() {
       continue;
     }
 
-    Timer::mark();
+    bench_timer.mark();
     bool status = load_query(query, query_number, matrices, preloading);
     if (!status) {
-      std::println("query #{} skipped", query_number);
+      std::println(std::cerr, "query #{} skipped", query_number);
       clear_query(query);
       continue;
     }
-    double load_time = Timer::measure();
+    double load_time = bench_timer.measure();
 
-    Timer::mark();
-    auto result = make_query(query);
+    bench_timer.mark();
+    auto result = make_query(query, query_number);
     results_file << query_number << ' ' << result << '\n';
-    double execute_time = Timer::measure();
+    double execute_time = bench_timer.measure();
 
-    Timer::mark();
+    bench_timer.mark();
     clear_query(query);
-    double clear_time = Timer::measure();
+    double clear_time = bench_timer.measure();
 
     std::println("query #{}; load time: {}, execute time: {}, clear time: {}, result: {}",
                  query_number, load_time, execute_time, clear_time, result);
@@ -338,7 +343,7 @@ bool benchmark() {
     total_execute_time += execute_time;
     total_clear_time += clear_time;
 
-    std::println("free space after #3: {}", parse_int(exec("python3 ../parse_mem.py")));
+    // std::println("free space after #3: {}", parse_int(exec("python3 ../parse_mem.py")));
   }
 
   std::cout << "\n\n\n";

@@ -6,12 +6,15 @@
 
 class Timer {
 private:
-  inline static struct timespec start {}, finish {};
+  using TimeT = struct timespec;
+  TimeT start {}, finish {};
 
 public:
-  static void mark() { clock_gettime(CLOCK_MONOTONIC, &start); }
+  Timer() { mark(); }
 
-  static double measure() {
+  void mark() { clock_gettime(CLOCK_MONOTONIC, &start); }
+
+  double measure() {
     clock_gettime(CLOCK_MONOTONIC, &finish);
     double elapsed =
       (finish.tv_sec - start.tv_sec) * 1000000.0 + (finish.tv_nsec - start.tv_nsec) / 1000.0;
