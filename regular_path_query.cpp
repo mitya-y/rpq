@@ -182,6 +182,9 @@ cuBool_Matrix regular_path_query(
 
   auto load_time = rpq_timer.measure();
 
+  Timer add_timer;
+  double add_time = 0;
+
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
     std::swap(frontier, next_frontier);
@@ -213,7 +216,9 @@ cuBool_Matrix regular_path_query(
     }
 
     // this must be accumulate with mask and save old value: reacheble += next_frontier & reacheble
+    add_timer.mark();
     status = cuBool_Matrix_EWiseAdd(result, reacheble, next_frontier, CUBOOL_HINT_NO);
+    add_time += add_timer.measure();
     assert(status == CUBOOL_STATUS_SUCCESS);
     std::swap(result, reacheble);
 
@@ -221,6 +226,8 @@ cuBool_Matrix regular_path_query(
   }
 
   std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
+
+  std::println("add time = {}", add_time);
 
   // free matrix necessary for algorithm
   cuBool_Matrix_Free(next_frontier);

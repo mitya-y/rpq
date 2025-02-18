@@ -13,6 +13,8 @@ if(RPQ_RUN_ON_CPU)
     set(CUBOOL_WITH_SEQUENTIAL ON)
 endif()
 
+set(CUBOOL_USE_NSPARSE_MERGE_FUNCTOR OFF)
+
 add_subdirectory(cuBool)
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC cuBool/cubool/include/cubool)
