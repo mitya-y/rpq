@@ -140,7 +140,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
     bench_timer.mark();
     std::cout << "loading at VRAM\n";
     for (int i = 0; i < matrices.size(); i++) {
-      uint32_t free_mem = parse_int(exec("python3 parse_mem.py"));
+      uint32_t free_mem = parse_int(execute_command("python3 parse_mem.py"));
 
       auto &data = matrices[i];
       if (!data.loaded) {
@@ -149,7 +149,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
 
       create_matrix(&data.matrix, data);
 
-      uint32_t new_free_mem = parse_int(exec("python3 parse_mem.py"));
+      uint32_t new_free_mem = parse_int(execute_command("python3 parse_mem.py"));
       std::println("query #{}: now used: {}, diff used: {}, actual size: {}", i, new_free_mem,
                    new_free_mem - free_mem, data.sizeMb());
     }
@@ -344,7 +344,7 @@ bool benchmark() {
     total_execute_time += execute_time;
     total_clear_time += clear_time;
 
-    // std::println("free space after #3: {}", parse_int(exec("python3 ../parse_mem.py")));
+    // std::println("free space after #3: {}", parse_int(execute_command("python3 ../parse_mem.py")));
   }
 
   std::cout << "\n\n\n";

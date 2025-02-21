@@ -182,8 +182,8 @@ cuBool_Matrix regular_path_query(
 
   auto load_time = rpq_timer.measure();
 
-  Timer add_timer;
-  double add_time = 0;
+  Timer add_timer, mxm_timer;
+  double add_time = 0, mxm_time = 0;
 
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
@@ -198,6 +198,7 @@ cuBool_Matrix regular_path_query(
         continue;
       }
 
+      mxm_timer.mark();
       cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transpsed[i];
       status = cuBool_MxM(symbol_frontier, automat_matrix, frontier, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
@@ -209,6 +210,7 @@ cuBool_Matrix regular_path_query(
       cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transpsed[i] : graph[i];
       status = cuBool_MxM(next_frontier, symbol_frontier, graph_matrix, CUBOOL_HINT_ACCUMULATE);
       assert(status == CUBOOL_STATUS_SUCCESS);
+      mxm_time += mxm_timer.measure();
       // apply invert mask
       status = cuBool_Matrix_EWiseMulInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
@@ -228,6 +230,7 @@ cuBool_Matrix regular_path_query(
   std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
 
   std::println("add time = {}", add_time);
+  std::println("mxm time = {}", mxm_time);
 
   // free matrix necessary for algorithm
   cuBool_Matrix_Free(next_frontier);
