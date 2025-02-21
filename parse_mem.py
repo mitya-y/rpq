@@ -1,6 +1,6 @@
 import subprocess
-out = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
-mem = str(out.stdout.split('\n')[9]).split('|')[2].strip()
-used = mem.split('/')[0].strip()
-used = "".join([a for a in used if a.isnumeric()])
-print(used)
+COMMAND = "nvidia-smi --query-gpu=memory.total,memory.used,memory.free --format=csv"
+out = subprocess.run(COMMAND.split(), capture_output=True, text=True)
+mem_line = out.stdout.split('\n')[1]
+all_mem, used_mem, avaible_mem = map(lambda s: int(s.split()[0]), mem_line.split(','))
+print(used_mem)

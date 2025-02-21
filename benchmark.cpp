@@ -21,7 +21,9 @@
 #define WIKIDATA_DIR "/home/mitya/Documents/wiki-dataset/"
 #define QUERIES_LOGS "queries_logs"
 
-#define QUERY_COUNT 660
+// #define QUERY_COUNT 660
+// same as for CPU bench on PC with 16gb RAM
+#define QUERY_COUNT 520
 #define PROP_COUNT 1395
 
 struct MatrixData {
@@ -140,7 +142,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
     bench_timer.mark();
     std::cout << "loading at VRAM\n";
     for (int i = 0; i < matrices.size(); i++) {
-      uint32_t free_mem = parse_int(exec("python3 parse_mem.py"));
+      uint32_t free_mem = parse_int(execute_command("python3 parse_mem.py"));
 
       auto &data = matrices[i];
       if (!data.loaded) {
@@ -149,7 +151,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
 
       create_matrix(&data.matrix, data);
 
-      uint32_t new_free_mem = parse_int(exec("python3 parse_mem.py"));
+      uint32_t new_free_mem = parse_int(execute_command("python3 parse_mem.py"));
       std::println("query #{}: now used: {}, diff used: {}, actual size: {}", i, new_free_mem,
                    new_free_mem - free_mem, data.sizeMb());
     }
@@ -309,9 +311,8 @@ bool benchmark() {
 
   std::filesystem::create_directory(QUERIES_LOGS);
 
-  // for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
-  // for (uint32_t query_number = 1; query_number < 521; query_number++) {
-  for (uint32_t query_number = 207; query_number <= 207; query_number++) {
+  for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
+  // for (uint32_t query_number = 207; query_number <= 207; query_number++) {
     Query query;
 
     std::fstream results_file("result.txt", std::ofstream::out | std::ofstream::app);
@@ -344,7 +345,7 @@ bool benchmark() {
     total_execute_time += execute_time;
     total_clear_time += clear_time;
 
-    // std::println("free space after #3: {}", parse_int(exec("python3 ../parse_mem.py")));
+    // std::println("free space after #3: {}", parse_int(execute_command("python3 ../parse_mem.py")));
   }
 
   std::cout << "\n\n\n";
