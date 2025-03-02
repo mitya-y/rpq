@@ -30,4 +30,7 @@ target_sources(${CMAKE_PROJECT_NAME} PUBLIC benchmark.cpp)
 add_subdirectory(fast_matrix_market)
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC fast_matrix_market/include)
 
+# thread pool library
+target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC thread-pool/include)
+
 file(COPY test_data DESTINATION .)
