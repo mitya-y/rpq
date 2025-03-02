@@ -92,6 +92,11 @@ cuBool_Matrix regular_path_query(
   for (uint32_t i = 0; i < graph.size(); i++) {
     graph_transpsed.emplace_back();
 
+    // we use transposed graph matrix only if label is inversed
+    if (!inversed_labels[i]) {
+      continue;
+    }
+
     auto label_matrix = graph[i];
     if (label_matrix == nullptr) {
       continue;
@@ -114,20 +119,23 @@ cuBool_Matrix regular_path_query(
   // transpose automat matrices
   std::vector<cuBool_Matrix> automat_transpsed;
   automat_transpsed.reserve(automat.size());
-  for (auto label_matrix : automat) {
-    automat_transpsed.emplace_back();
-    if (label_matrix == nullptr) {
-      continue;
+  // if all lables are transposed we don't use transposed automat matrices
+  if (!all_labels_are_inversed) {
+    for (auto label_matrix : automat) {
+      automat_transpsed.emplace_back();
+      if (label_matrix == nullptr) {
+        continue;
+      }
+
+      cuBool_Index nrows, ncols;
+      cuBool_Matrix_Nrows(label_matrix, &nrows);
+      cuBool_Matrix_Ncols(label_matrix, &ncols);
+
+      status = cuBool_Matrix_New(&automat_transpsed.back(), ncols, nrows);
+      assert(status == CUBOOL_STATUS_SUCCESS);
+      status = cuBool_Matrix_Transpose(automat_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
+      assert(status == CUBOOL_STATUS_SUCCESS);
     }
-
-    cuBool_Index nrows, ncols;
-    cuBool_Matrix_Nrows(label_matrix, &nrows);
-    cuBool_Matrix_Ncols(label_matrix, &ncols);
-
-    status = cuBool_Matrix_New(&automat_transpsed.back(), ncols, nrows);
-    assert(status == CUBOOL_STATUS_SUCCESS);
-    status = cuBool_Matrix_Transpose(automat_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
-    assert(status == CUBOOL_STATUS_SUCCESS);
   }
 
   cuBool_Index graph_nodes_number = 0;
