@@ -1,3 +1,4 @@
+#include <future>
 #include <cassert>
 #include <iostream>
 #include <print>
@@ -86,6 +87,9 @@ cuBool_Matrix regular_path_query(
     inversed_labels[i] = is_inverse;
   }
 
+  constexpr auto transpose_launch_policy = std::launch::deferred;
+  std::vector<std::future<cuBool_Status>> futures;
+
   // transpose graph matrices
   std::vector<cuBool_Matrix> graph_transpsed;
   graph_transpsed.reserve(graph.size());
@@ -112,8 +116,12 @@ cuBool_Matrix regular_path_query(
 
     status = cuBool_Matrix_New(&graph_transpsed.back(), ncols, nrows);
     assert(status == CUBOOL_STATUS_SUCCESS);
-    status = cuBool_Matrix_Transpose(graph_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
-    assert(status == CUBOOL_STATUS_SUCCESS);
+
+    futures.push_back(std::async(transpose_launch_policy,
+      [matrix = graph_transpsed.back(), label_matrix]() {
+        auto status = cuBool_Matrix_Transpose(matrix, label_matrix, CUBOOL_HINT_NO);
+        return status;
+      }));
   }
 
   // transpose automat matrices
@@ -133,8 +141,12 @@ cuBool_Matrix regular_path_query(
 
       status = cuBool_Matrix_New(&automat_transpsed.back(), ncols, nrows);
       assert(status == CUBOOL_STATUS_SUCCESS);
-      status = cuBool_Matrix_Transpose(automat_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
-      assert(status == CUBOOL_STATUS_SUCCESS);
+
+      futures.push_back(std::async(transpose_launch_policy,
+        [matrix = automat_transpsed.back(), label_matrix]() {
+          auto status = cuBool_Matrix_Transpose(matrix, label_matrix, CUBOOL_HINT_NO);
+          return status;
+        }));
     }
   }
 
@@ -192,6 +204,10 @@ cuBool_Matrix regular_path_query(
 
   Timer add_timer, mxm_timer;
   double add_time = 0, mxm_time = 0;
+
+  for (auto &future : futures) {
+    assert(future.get() == CUBOOL_STATUS_SUCCESS);
+  }
 
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
