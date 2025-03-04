@@ -1,70 +1,20 @@
+#include <future>
 #include <cassert>
 #include <iostream>
 #include <print>
 #include <set>
+#include <numeric>
+#include <ranges>
 
 #include "cubool.h"
 #include "regular_path_query.hpp"
 #include "timer.hpp"
 
+#include "BS_thread_pool.hpp"
+
 static Timer rpq_timer {};
 
-void print_cubool_matrix(cuBool_Matrix matrix, std::string name, bool print_full) {
-  if (name != "") {
-    std::cout << name << std::endl;
-  }
-
-  cuBool_Index nvals;
-  cuBool_Matrix_Nvals(matrix, &nvals);
-  std::vector<cuBool_Index> rows(nvals), cols(nvals);
-  cuBool_Matrix_ExtractPairs(matrix, rows.data(), cols.data(), &nvals);
-
-  if (!print_full) {
-    for (int i = 0; i < nvals; i++) {
-      printf("(%d, %d)\n", rows[i], cols[i]);
-    }
-    return;
-  }
-
-  std::set<std::pair<cuBool_Index, cuBool_Index>> indexes {};
-  for (int i = 0; i < nvals; i++) {
-    indexes.insert({rows[i], cols[i]});
-  }
-
-  cuBool_Index nrows, ncols;
-  cuBool_Matrix_Ncols(matrix, &ncols);
-  cuBool_Matrix_Nrows(matrix, &nrows);
-
-  for (int i = 0; i < nrows; i++) {
-    for (int j = 0; j < ncols; j++) {
-      std::cout << (indexes.contains({i, j}) ? '1' : '0') << ' ';
-    }
-    std::cout << "\n";
-  }
-}
-
-void print_cubool_vector(cuBool_Vector vector, std::string name) {
-  if (name != "") {
-    std::cout << name << ": ";
-  }
-
-  cuBool_Index nvals;
-  cuBool_Vector_Nvals(vector, &nvals);
-  std::vector<cuBool_Index> row(nvals);
-  cuBool_Vector_ExtractValues(vector, row.data(), &nvals);
-
-  printf("{");
-  for (int i = 0; i < nvals; i++) {
-    printf("%d", row[i]);
-    if (i != nvals - 1) {
-      printf(", ");
-    }
-  }
-  printf("}, size = %d\n", nvals);
-}
-
-
-cuBool_Matrix regular_path_query(
+cuBool_Matrix par_regular_path_query(
   // vector of sparse graph matrices for each label
   const std::vector<cuBool_Matrix> &graph, const std::vector<cuBool_Index> &source_vertices,
   // vector of sparse automat matrices for each label
@@ -85,6 +35,10 @@ cuBool_Matrix regular_path_query(
     is_inverse ^= all_labels_are_inversed;
     inversed_labels[i] = is_inverse;
   }
+
+  BS::thread_pool pool;
+
+  std::vector<std::future<cuBool_Status>> futures;
 
   // transpose graph matrices
   std::vector<cuBool_Matrix> graph_transpsed;
@@ -112,8 +66,11 @@ cuBool_Matrix regular_path_query(
 
     status = cuBool_Matrix_New(&graph_transpsed.back(), ncols, nrows);
     assert(status == CUBOOL_STATUS_SUCCESS);
-    status = cuBool_Matrix_Transpose(graph_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
-    assert(status == CUBOOL_STATUS_SUCCESS);
+
+    futures.push_back(pool.submit_task([matrix = graph_transpsed.back(), label_matrix]() {
+      auto status = cuBool_Matrix_Transpose(matrix, label_matrix, CUBOOL_HINT_NO);
+      return status;
+    }));
   }
 
   // transpose automat matrices
@@ -133,8 +90,11 @@ cuBool_Matrix regular_path_query(
 
       status = cuBool_Matrix_New(&automat_transpsed.back(), ncols, nrows);
       assert(status == CUBOOL_STATUS_SUCCESS);
-      status = cuBool_Matrix_Transpose(automat_transpsed.back(), label_matrix, CUBOOL_HINT_NO);
-      assert(status == CUBOOL_STATUS_SUCCESS);
+
+      futures.push_back(pool.submit_task([matrix = automat_transpsed.back(), label_matrix]() {
+        auto status = cuBool_Matrix_Transpose(matrix, label_matrix, CUBOOL_HINT_NO);
+        return status;
+      }));
     }
   }
 
@@ -183,68 +143,126 @@ cuBool_Matrix regular_path_query(
 
   cuBool_Index states = source_vertices.size();
 
-  // temporary matrix for write result of cubool functions
-  cuBool_Matrix result;
-  status = cuBool_Matrix_New(&result, automat_nodes_number, graph_nodes_number);
-  assert(status == CUBOOL_STATUS_SUCCESS);
-
   auto load_time = rpq_timer.measure();
 
-  Timer add_timer, mxm_timer;
-  double add_time = 0, mxm_time = 0;
-
   const auto label_number = std::min(graph.size(), automat.size());
+
+  std::vector<cuBool_Matrix> result_label_matrices;
+  result_label_matrices.resize(label_number);
+  for (auto &matrix : result_label_matrices) {
+    status = cuBool_Matrix_New(&matrix, automat_nodes_number, graph_nodes_number);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+  }
+
+  std::vector<cuBool_Matrix> util_label_matrices;
+  util_label_matrices.resize(label_number);
+  for (auto &matrix : util_label_matrices) {
+    status = cuBool_Matrix_New(&matrix, automat_nodes_number, graph_nodes_number);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+  }
+
+  for (auto &future : futures) {
+    status = future.get();
+    assert(status == CUBOOL_STATUS_SUCCESS);
+  }
+
+  futures.reserve(label_number);
+
   while (states > 0) {
     std::swap(frontier, next_frontier);
 
-    // clear next_frontier
-    status = cuBool_Matrix_Build(next_frontier, nullptr, nullptr, 0, CUBOOL_HINT_NO);
-    assert(status == CUBOOL_STATUS_SUCCESS);
-
+    futures.clear();
     for (int i = 0; i < label_number; i++) {
       if (graph[i] == nullptr || automat[i] == nullptr) {
         continue;
       }
 
-      mxm_timer.mark();
-      cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transpsed[i];
-      status = cuBool_MxM(symbol_frontier, automat_matrix, frontier, CUBOOL_HINT_NO);
-      assert(status == CUBOOL_STATUS_SUCCESS);
+      futures.push_back(pool.submit_task(
+        [&, result = result_label_matrices[i], util = util_label_matrices[i], i]() mutable {
+          cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transpsed[i];
+          status = cuBool_MxM(util, automat_matrix, frontier, CUBOOL_HINT_NO);
+          if (status != CUBOOL_STATUS_SUCCESS) {
+            return status;
+          }
 
-      // TODO: check states here
+          // we want: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
+          cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transpsed[i] : graph[i];
+          status = cuBool_MxM(result, util, graph_matrix, CUBOOL_HINT_NO);
+          if (status != CUBOOL_STATUS_SUCCESS) {
+            return status;
+          }
 
-      // we want: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
-      // mult 2 matrices
-      cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transpsed[i] : graph[i];
-      status = cuBool_MxM(next_frontier, symbol_frontier, graph_matrix, CUBOOL_HINT_ACCUMULATE);
-      assert(status == CUBOOL_STATUS_SUCCESS);
-      mxm_time += mxm_timer.measure();
-      // apply invert mask
-      status = cuBool_Matrix_EWiseMulInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
-      assert(status == CUBOOL_STATUS_SUCCESS);
-      std::swap(result, next_frontier);
+#if 0
+          // apply invert mask
+          status = cuBool_Matrix_EWiseMulInverted(util, result, reacheble, CUBOOL_HINT_NO);
+          if (status != CUBOOL_STATUS_SUCCESS) {
+            return status;
+          }
+          std::swap(result, util);
+#endif
+
+          return status;
+      }));
     }
 
-    // this must be accumulate with mask and save old value: reacheble += next_frontier & reacheble
-    add_timer.mark();
-    status = cuBool_Matrix_EWiseAdd(result, reacheble, next_frontier, CUBOOL_HINT_NO);
-    add_time += add_timer.measure();
+    for (auto &future : futures) {
+      status = future.get();
+      assert(status == CUBOOL_STATUS_SUCCESS);
+    }
+
+    auto size = result_label_matrices.size();
+    while (size > 1) {
+      auto pairs_number = size / 2;
+      for (std::size_t i = 0; i < pairs_number; i++) {
+        pool.detach_task(
+        [&a = result_label_matrices[i],
+          b = result_label_matrices[size - 1 - i],
+         &c = util_label_matrices[i]]() {
+          cuBool_Matrix_EWiseAdd(c, a, b, CUBOOL_HINT_NO);
+          std::swap(a, c);
+        });
+      }
+      pool.wait();
+      size = pairs_number + (size % 2);
+    }
+    std::swap(next_frontier, result_label_matrices[0]);
+
+    assert(util_label_matrices.size() > 0);
+    auto &util = util_label_matrices[0];
+
+    // TODO: this is bag, fix it
+    // UPD: maybe not bug, maybe it is feature
+    // apply invert mask
+    status = cuBool_Matrix_EWiseMulInverted(util, next_frontier, reacheble, CUBOOL_HINT_NO);
+    std::swap(util, next_frontier);
+
+    // this must be accumulate with mask and save old value: reacheble += next_frontier | reacheble
+    status = cuBool_Matrix_EWiseAdd(util, reacheble, next_frontier, CUBOOL_HINT_NO);
     assert(status == CUBOOL_STATUS_SUCCESS);
-    std::swap(result, reacheble);
+    std::swap(util, reacheble);
 
     cuBool_Matrix_Nvals(next_frontier, &states);
+
+    // print_cubool_matrix(next_frontier, "next_frontier", true);
+    // print_cubool_matrix(reacheble, "reacheble", true);
   }
 
   std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
 
-  std::println("add time = {}", add_time);
-  std::println("mxm time = {}", mxm_time);
-
   // free matrix necessary for algorithm
+  for (auto &matrix : result_label_matrices) {
+    status = cuBool_Matrix_Free(matrix);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+  }
+
+  for (auto &matrix : util_label_matrices) {
+    status = cuBool_Matrix_Free(matrix);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+  }
+
   cuBool_Matrix_Free(next_frontier);
   cuBool_Matrix_Free(frontier);
   cuBool_Matrix_Free(symbol_frontier);
-  cuBool_Matrix_Free(result);
 
   for (cuBool_Matrix matrix : graph_transpsed) {
     if (matrix != nullptr) {
