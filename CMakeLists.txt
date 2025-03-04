@@ -34,3 +34,4 @@ target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC fast_matrix_market/inclu
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC thread-pool/include)
 
 file(COPY test_data DESTINATION .)
+file(COPY parse_mem.py DESTINATION .)

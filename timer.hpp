@@ -49,3 +49,7 @@ inline static uint32_t parse_int(const std::string& s) {
   std::from_chars(s.c_str(), s.c_str() + s.size(), value);
   return value;
 }
+
+inline static uint32_t get_used_memory() {
+  return parse_int(execute_command("python3 parse_mem.py"));
+}

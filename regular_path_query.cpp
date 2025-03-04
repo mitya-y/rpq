@@ -91,7 +91,7 @@ cuBool_Matrix regular_path_query(
     inversed_labels[i] = is_inverse;
   }
 
-  BS::thread_pool pool;
+  BS::thread_pool pool(2);
 
   std::vector<std::future<cuBool_Status>> futures;
 
@@ -241,7 +241,6 @@ cuBool_Matrix regular_path_query(
           }
 
           // we want: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
-          // mult 2 matrices
           cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transpsed[i] : graph[i];
           status = cuBool_MxM(result, util, graph_matrix, CUBOOL_HINT_NO);
           if (status != CUBOOL_STATUS_SUCCESS) {
@@ -305,6 +304,7 @@ cuBool_Matrix regular_path_query(
 
   std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
 
+  // free matrix necessary for algorithm
   for (auto &matrix : result_label_matrices) {
     status = cuBool_Matrix_Free(matrix);
     assert(status == CUBOOL_STATUS_SUCCESS);
@@ -315,7 +315,6 @@ cuBool_Matrix regular_path_query(
     assert(status == CUBOOL_STATUS_SUCCESS);
   }
 
-  // free matrix necessary for algorithm
   cuBool_Matrix_Free(next_frontier);
   cuBool_Matrix_Free(frontier);
   cuBool_Matrix_Free(symbol_frontier);
