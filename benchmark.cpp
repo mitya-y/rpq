@@ -27,42 +27,34 @@
 #define PROP_COUNT 1395
 
 struct MatrixData {
-  bool loaded = false;
-  int64_t nrows = 0, ncols = 0;
-  std::vector<cuBool_Index> rows, cols;
-  cuBool_Index nvals = 0;
+  bool _loaded = false;
+  int64_t _nrows = 0, _ncols = 0;
+  std::vector<cuBool_Index> _rows, _cols;
+  cuBool_Index _nvals = 0;
 
-  cuBool_Matrix matrix = nullptr;
+  cuBool_Matrix _matrix = nullptr;
 
-  double sizeMb() { return (sizeof(cuBool_Index) * nvals * 2) / 1'000'000.0; }
+  double sizeMb() const {
+    return (sizeof(cuBool_Index) * _nvals * 2) / 1'000'000.0;
+  }
+
+  bool load_to_cpu(std::string_view filename);
+  bool copy_to_gpu(cuBool_Matrix *matrix) const;
+
+  bool load_to_gpu() {
+    return copy_to_gpu(&_matrix);
+  }
+
+  ~MatrixData() {
+    if (_matrix != nullptr) {
+      cuBool_Matrix_Free(_matrix);
+    }
+  }
 };
-
 using Wikidata = std::vector<MatrixData>;
 
-struct Query {
-  std::vector<cuBool_Matrix> graph;
-  std::vector<cuBool_Matrix> automat;
-
-  std::vector<cuBool_Matrix> graph_transposed;
-  std::vector<cuBool_Matrix> automat_transposed;
-  bool transposed = false;
-
-  std::vector<cuBool_Index> sourece_vertices;
-  std::vector<cuBool_Index> start_states;
-
-  std::vector<cuBool_Index> final_states;
-
-  std::vector<uint32_t> labels;
-  std::vector<bool> inverse_lables;
-  bool labels_inversed = false;
-
-  bool matrices_was_loaded = true;
-};
-
-static Timer bench_timer {};
-
-static bool load_matrix(MatrixData &data, std::string_view filename) {
-  if (data.loaded) {
+bool MatrixData::load_to_cpu(std::string_view filename) {
+  if (_loaded) {
     return true;
   }
 
@@ -72,24 +64,23 @@ static bool load_matrix(MatrixData &data, std::string_view filename) {
   }
 
   std::vector<bool> vals;
-  fast_matrix_market::read_matrix_market_triplet(file, data.nrows, data.ncols, data.rows, data.cols,
-                                                 vals);
-  data.nvals = vals.size();
-  data.loaded = true;
+  fast_matrix_market::read_matrix_market_triplet(file, _nrows, _ncols, _rows, _cols, vals);
+  _nvals = vals.size();
+  _loaded = true;
 
   return true;
 }
 
-static bool create_matrix(cuBool_Matrix *matrix, const MatrixData &data) {
+bool MatrixData::copy_to_gpu(cuBool_Matrix *matrix) const {
   cuBool_Status status = CUBOOL_STATUS_SUCCESS;
 
-  status = cuBool_Matrix_New(matrix, data.nrows, data.ncols);
+  status = cuBool_Matrix_New(matrix, _nrows, _ncols);
   if (status != CUBOOL_STATUS_SUCCESS) {
     return false;
   }
 
   status =
-    cuBool_Matrix_Build(*matrix, data.rows.data(), data.cols.data(), data.nvals, CUBOOL_HINT_NO);
+    cuBool_Matrix_Build(*matrix, _rows.data(), _cols.data(), _nvals, CUBOOL_HINT_NO);
   if (status != CUBOOL_STATUS_SUCCESS) {
     return false;
   }
@@ -99,8 +90,9 @@ static bool create_matrix(cuBool_Matrix *matrix, const MatrixData &data) {
 
 static Wikidata load_matrices(bool load_at_gpu = false) {
   Wikidata matrices(PROP_COUNT + 1);
+  Timer load_matrices_timer {};
 
-  bench_timer.mark();
+  load_matrices_timer.mark();
   std::cout << "loading at RAM\n";
   for (uint32_t query_number = 0; query_number < QUERY_COUNT; query_number++) {
     std::cout << "\rloaded query # " << query_number;
@@ -135,51 +127,97 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
       label = std::abs(label);
 
       std::string filename = std::format("{}{}{}.txt", WIKIDATA_DIR, "Wikidata/", label);
-      load_matrix(matrices[label], filename);
+      matrices[label].load_to_cpu(filename);
     }
   }
   std::cout << "\r";
-  double elapsed = bench_timer.measure();
+  double elapsed = load_matrices_timer.measure();
   std::cout << "matrices loaded, time: " << elapsed << "s\n";
 
   if (load_at_gpu) {
-    bench_timer.mark();
+    load_matrices_timer.mark();
     std::cout << "loading at VRAM\n";
     for (int i = 0; i < matrices.size(); i++) {
       uint32_t free_mem = parse_int(execute_command("python3 parse_mem.py"));
 
       auto &data = matrices[i];
-      if (!data.loaded) {
+      if (!data._loaded) {
         continue;
       }
 
-      create_matrix(&data.matrix, data);
+      data.load_to_gpu();
 
       uint32_t new_free_mem = parse_int(execute_command("python3 parse_mem.py"));
       std::println("query #{}: now used: {}, diff used: {}, actual size: {}", i, new_free_mem,
                    new_free_mem - free_mem, data.sizeMb());
     }
-    elapsed = bench_timer.measure();
+    elapsed = load_matrices_timer.measure();
     std::cout << "matrices loaded at GPU, time: " << elapsed << "s\n";
   }
 
   return matrices;
 }
 
-static bool load_query(Query &query, uint32_t query_number, const Wikidata &matrices,
-                       bool preloaded, bool transpose) {
+struct Query {
+  std::vector<cuBool_Matrix> _graph;
+  std::vector<cuBool_Matrix> _automat;
+
+  std::vector<cuBool_Matrix> _graph_transposed;
+  std::vector<cuBool_Matrix> _automat_transposed;
+  bool _transposed = false;
+
+  std::vector<cuBool_Index> _sourece_vertices;
+  std::vector<cuBool_Index> _start_states;
+
+  std::vector<cuBool_Index> _final_states;
+
+  std::vector<uint32_t> _labels;
+  std::vector<bool> _inverse_lables;
+  bool _labels_inversed = false;
+
+  bool _matrices_was_loaded = true;
+
+  uint32_t _query_number = 0;
+  Timer _query_timer;
+
+  std::pair<bool, double> load(uint32_t query_number, const Wikidata &matrices,
+                               bool preloaded = false, bool transpose = true);
+  std::pair<uint32_t, double> execute();
+  void clear();
+
+  // load + execute + clear
+  std::pair<uint32_t, double> make(uint32_t query_number, const Wikidata &matrices,
+                                   bool preloaded = false, bool transpose = true) {
+    if (!load(query_number, matrices, preloaded, transpose).first) {
+      clear();
+      return {0, 0};
+    }
+    auto answer = execute();
+    clear();
+    return answer;
+  }
+
+
+  ~Query() {
+    clear();
+  }
+};
+
+std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matrices,
+                                    bool preloaded, bool transpose) {
+  _query_timer.mark();
+  _query_number = query_number;
+
   std::string filename = std::format("{}{}{}/meta.txt", WIKIDATA_DIR, "Queries/", query_number);
   std::ifstream query_file(filename);
   if (!query_file) {
-    std::cerr << "skipped query " << query_number << ", file not exists\n";
-    return false;
+    return {false, 0};
   }
 
   cuBool_Index source = 0, dest = 0;
   query_file >> source >> dest;
   if (source == 0 && dest == 0) {
-    std::cerr << "skipped query " << query_number << ", sourse and dest is 0\n";
-    return false;
+    return {false, 0};
   }
   source--;
   dest--;
@@ -202,45 +240,45 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
 
   uint32_t labels_number = 0;
   query_file >> labels_number;
-  query.labels.resize(labels_number);
-  query.inverse_lables.resize(labels_number);
+  _labels.resize(labels_number);
+  _inverse_lables.resize(labels_number);
   for (int i = 0; i < labels_number; i++) {
     int label;
     query_file >> label;
-    query.labels[i] = std::abs(label);
-    query.inverse_lables[i] = label < 0;
+    _labels[i] = std::abs(label);
+    _inverse_lables[i] = label < 0;
   }
 
-  query.graph.assign(labels_number, nullptr);
-  query.automat.assign(labels_number, nullptr);
+  _graph.assign(labels_number, nullptr);
+  _automat.assign(labels_number, nullptr);
 
-  query.matrices_was_loaded = !preloaded;
-  query.transposed = transpose;
+  _matrices_was_loaded = !preloaded;
+  _transposed = transpose;
 
   for (int i = 0; i < labels_number; i++) {
-    uint32_t label = query.labels[i];
+    uint32_t label = _labels[i];
 
     // std::string filename = std::format("{}{}{}.txt", WIKIDATA_DIR, "Wikidata/", label);
     if (!preloaded) {
-      if (not create_matrix(&query.graph[i], matrices[label])) {
-        return false;
+      if (not matrices[label].copy_to_gpu(&_graph[i])) {
+        return {false, 0};
       }
     } else {
-      query.graph[i] = matrices[i].matrix;
+      _graph[i] = matrices[i]._matrix;
     }
 
     filename = std::format("{}{}{}/{}.txt", WIKIDATA_DIR, "Queries/", query_number,
-                           query.inverse_lables[i] ? -(int)label : (int)label);
+                           _inverse_lables[i] ? -(int)label : (int)label);
     MatrixData data;
-    if (not load_matrix(data, filename) || not create_matrix(&query.automat[i], data)) {
-      return false;
+    if (not data.load_to_cpu(filename) || not data.copy_to_gpu(&_automat[i])) {
+      return {false, 0};
     }
   }
 
   if (transpose) {
-    query.graph_transposed.reserve(query.graph.size());
-    for (auto label_matrix : query.graph) {
-      query.graph_transposed.emplace_back();
+    _graph_transposed.reserve(_graph.size());
+    for (auto label_matrix : _graph) {
+      _graph_transposed.emplace_back();
 
       if (label_matrix == nullptr) {
         continue;
@@ -250,14 +288,14 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
       cuBool_Matrix_Nrows(label_matrix, &nrows);
       cuBool_Matrix_Ncols(label_matrix, &ncols);
 
-      cuBool_Matrix_New(&query.graph_transposed.back(), ncols, nrows);
-      cuBool_Matrix_Transpose(query.graph_transposed.back(), label_matrix, CUBOOL_HINT_NO);
+      cuBool_Matrix_New(&_graph_transposed.back(), ncols, nrows);
+      cuBool_Matrix_Transpose(_graph_transposed.back(), label_matrix, CUBOOL_HINT_NO);
     }
 
     // transpose automat matrices
-    query.automat_transposed.reserve(query.automat.size());
-    for (auto label_matrix : query.automat) {
-      query.automat_transposed.emplace_back();
+    _automat_transposed.reserve(_automat.size());
+    for (auto label_matrix : _automat) {
+      _automat_transposed.emplace_back();
       if (label_matrix == nullptr) {
         continue;
       }
@@ -266,50 +304,48 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
       cuBool_Matrix_Nrows(label_matrix, &nrows);
       cuBool_Matrix_Ncols(label_matrix, &ncols);
 
-      cuBool_Matrix_New(&query.automat_transposed.back(), ncols, nrows);
-      cuBool_Matrix_Transpose(query.automat_transposed.back(), label_matrix, CUBOOL_HINT_NO);
+      cuBool_Matrix_New(&_automat_transposed.back(), ncols, nrows);
+      cuBool_Matrix_Transpose(_automat_transposed.back(), label_matrix, CUBOOL_HINT_NO);
     }
   }
 
-  std::println("transposed sizes: {} {}", query.graph_transposed.size(), query.automat_transposed.size());
-
   if (source == std::numeric_limits<cuBool_Index>::max()) {
-    query.start_states = std::move(inv_src_verts);
-    query.final_states = std::move(src_verts);
-    query.sourece_vertices = std::vector {dest};
-    query.labels_inversed = true;
+    _start_states = std::move(inv_src_verts);
+    _final_states = std::move(src_verts);
+    _sourece_vertices = std::vector {dest};
+    _labels_inversed = true;
   } else {
-    query.start_states = std::move(src_verts);
-    query.final_states = std::move(inv_src_verts);
-    query.sourece_vertices = std::vector {source};
-    query.labels_inversed = false;
+    _start_states = std::move(src_verts);
+    _final_states = std::move(inv_src_verts);
+    _sourece_vertices = std::vector {source};
+    _labels_inversed = false;
   }
 
-  return true;
+  return {true, _query_timer.measure()};
 }
 
-static void clear_query(Query &query) {
-  if (query.matrices_was_loaded) {
-    for (auto matrix : query.graph) {
+void Query::clear() {
+  if (_matrices_was_loaded) {
+    for (auto matrix : _graph) {
       if (matrix != nullptr) {
         cuBool_Matrix_Free(matrix);
       }
     }
   }
 
-  for (auto matrix : query.automat) {
+  for (auto matrix : _automat) {
     if (matrix != nullptr) {
       cuBool_Matrix_Free(matrix);
     }
   }
 
-  if (query.transposed) {
-    for (cuBool_Matrix matrix : query.graph_transposed) {
+  if (_transposed) {
+    for (cuBool_Matrix matrix : _graph_transposed) {
       if (matrix != nullptr) {
         cuBool_Matrix_Free(matrix);
       }
     }
-    for (cuBool_Matrix matrix : query.automat_transposed) {
+    for (cuBool_Matrix matrix : _automat_transposed) {
       if (matrix != nullptr) {
         cuBool_Matrix_Free(matrix);
       }
@@ -317,8 +353,8 @@ static void clear_query(Query &query) {
   }
 }
 
-static std::pair<uint32_t, double> make_query(const Query &query, uint32_t query_number) {
-  std::string filename = std::format("{}/{}.txt", QUERIES_LOGS, query_number);
+std::pair<uint32_t, double> Query::execute() {
+  std::string filename = std::format("{}/{}.txt", QUERIES_LOGS, _query_number);
   std::ofstream log_file(filename);
 
   cuBool_Matrix recheable = nullptr;
@@ -326,30 +362,29 @@ static std::pair<uint32_t, double> make_query(const Query &query, uint32_t query
   static Timer make_query_timer {};
 
   make_query_timer.mark();
-  if (query.transposed) {
-    std::println("transposed");
-    recheable = regular_path_query_with_transposed(query.graph, query.sourece_vertices,
-                                                   query.automat, query.start_states,
-                                                   query.graph_transposed,
-                                                   query.automat_transposed,
-                                                   query.inverse_lables, query.labels_inversed,
+  if (_transposed) {
+    recheable = regular_path_query_with_transposed(_graph, _sourece_vertices,
+                                                   _automat, _start_states,
+                                                   _graph_transposed,
+                                                   _automat_transposed,
+                                                   _inverse_lables, _labels_inversed,
                                                    log_file);
   } else {
-    recheable = regular_path_query(query.graph, query.sourece_vertices,
-                                   query.automat, query.start_states,
-                                   query.inverse_lables, query.labels_inversed, log_file);
+    recheable = regular_path_query(_graph, _sourece_vertices,
+                                   _automat, _start_states,
+                                   _inverse_lables, _labels_inversed, log_file);
   }
   auto time = make_query_timer.measure();
 
   cuBool_Index automat_rows, graph_rows;
-  cuBool_Matrix_Nrows(query.graph.front(), &graph_rows);
-  cuBool_Matrix_Nrows(query.automat.front(), &automat_rows);
+  cuBool_Matrix_Nrows(_graph.front(), &graph_rows);
+  cuBool_Matrix_Nrows(_automat.front(), &automat_rows);
 
   cuBool_Vector P, F;
   cuBool_Vector_New(&P, graph_rows);
   cuBool_Vector_New(&F, automat_rows);
 
-  cuBool_Vector_Build(F, query.final_states.data(), query.final_states.size(), CUBOOL_HINT_NO);
+  cuBool_Vector_Build(F, _final_states.data(), _final_states.size(), CUBOOL_HINT_NO);
   cuBool_VxM(P, F, recheable, CUBOOL_HINT_NO);
   uint32_t answer = 0;
   cuBool_Vector_Nvals(P, &answer);
@@ -365,58 +400,44 @@ bool benchmark() {
   cuBool_Initialize(CUBOOL_HINT_NO);
 
   bool preloading = false;
+  bool pretransposed = true;
   auto matrices = load_matrices(preloading);
 
   std::set<uint32_t> too_big_queris = {115};
 
   double total_load_time = 0;
   double total_execute_time = 0;
-  double total_clear_time = 0;
 
-  std::fstream _results_file("result.txt", std::ofstream::out);
-  _results_file.close();
-
+  std::fstream results_file("result.txt", std::ofstream::out);
   std::filesystem::create_directory(QUERIES_LOGS);
 
+  std::println("query_number execute_time load_time result");
   for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
   // for (uint32_t query_number = 207; query_number <= 207; query_number++) {
-    Query query;
-
-    std::fstream results_file("result.txt", std::ofstream::out | std::ofstream::app);
     if (too_big_queris.contains(query_number)) {
       continue;
     }
 
-    bench_timer.mark();
-    bool status = load_query(query, query_number, matrices, preloading, true);
-    if (!status) {
-      std::println(std::cerr, "query #{} skipped", query_number);
-      clear_query(query);
+    Query query;
+    auto [load_successfully, load_time] =
+      query.load(query_number, matrices, preloading, pretransposed);
+    if (!load_successfully) {
+      std::println("{} skipped", query_number);
       continue;
     }
-    double load_time = bench_timer.measure();
+    auto [result, execute_time] = query.execute();
+    query.clear();
 
-    bench_timer.mark();
-    auto [result, make_query_time] = make_query(query, query_number);
-    results_file << query_number << ' ' << result << '\n';
-    double execute_time = bench_timer.measure();
-    execute_time = make_query_time;
-
-    bench_timer.mark();
-    clear_query(query);
-    double clear_time = bench_timer.measure();
-
-    std::println("query #{}; load time: {}, execute time: {}, clear time: {}, result: {}",
-                 query_number, load_time, execute_time, clear_time, result);
+    std::println("{} {} {} {}", query_number, execute_time, load_time, result);
+    std::println(results_file, "{} {} {} {}", query_number, execute_time, load_time, result);
 
     total_load_time += load_time;
     total_execute_time += execute_time;
-    total_clear_time += clear_time;
   }
 
   std::cout << "\n\n\n";
-  std::println("total load time: {}, total execute time: {}, total clear time: {}\n",
-               total_load_time, total_execute_time, total_clear_time);
+  std::println("total load time: {}, total execute time: {}\n",
+               total_load_time, total_execute_time);
 
   cuBool_Finalize();
 

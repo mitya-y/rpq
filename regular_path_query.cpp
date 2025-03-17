@@ -184,8 +184,8 @@ cuBool_Matrix regular_path_query_with_transposed(
 
   std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
 
-  std::println("add time = {}", add_time);
-  std::println("mxm time = {}", mxm_time);
+  // std::println("add time = {}", add_time);
+  // std::println("mxm time = {}", mxm_time);
 
   // free matrix necessary for algorithm
   cuBool_Matrix_Free(next_frontier);
