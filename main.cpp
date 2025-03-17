@@ -201,7 +201,7 @@ bool test() {
 
 int main(int argc, char **argv) {
   if (argc < 2 || std::string_view("test") == argv[1]) {
-    exit(test() ? 0 : -1);
+    return test() ? 0 : -1;
   } else if (argc >= 2 && std::string_view("bench") == argv[1]) {
 #if 0
     std::jthread thread([](std::stop_token token) {

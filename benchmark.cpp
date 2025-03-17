@@ -43,6 +43,10 @@ struct Query {
   std::vector<cuBool_Matrix> graph;
   std::vector<cuBool_Matrix> automat;
 
+  std::vector<cuBool_Matrix> graph_transposed;
+  std::vector<cuBool_Matrix> automat_transposed;
+  bool transposed = false;
+
   std::vector<cuBool_Index> sourece_vertices;
   std::vector<cuBool_Index> start_states;
 
@@ -163,7 +167,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
 }
 
 static bool load_query(Query &query, uint32_t query_number, const Wikidata &matrices,
-                       bool preloaded) {
+                       bool preloaded, bool transpose) {
   std::string filename = std::format("{}{}{}/meta.txt", WIKIDATA_DIR, "Queries/", query_number);
   std::ifstream query_file(filename);
   if (!query_file) {
@@ -210,17 +214,18 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
   query.graph.assign(labels_number, nullptr);
   query.automat.assign(labels_number, nullptr);
 
+  query.matrices_was_loaded = !preloaded;
+  query.transposed = transpose;
+
   for (int i = 0; i < labels_number; i++) {
     uint32_t label = query.labels[i];
 
     // std::string filename = std::format("{}{}{}.txt", WIKIDATA_DIR, "Wikidata/", label);
     if (!preloaded) {
-      query.matrices_was_loaded = true;
       if (not create_matrix(&query.graph[i], matrices[label])) {
         return false;
       }
     } else {
-      query.matrices_was_loaded = false;
       query.graph[i] = matrices[i].matrix;
     }
 
@@ -231,6 +236,42 @@ static bool load_query(Query &query, uint32_t query_number, const Wikidata &matr
       return false;
     }
   }
+
+  if (transpose) {
+    query.graph_transposed.reserve(query.graph.size());
+    for (auto label_matrix : query.graph) {
+      query.graph_transposed.emplace_back();
+
+      if (label_matrix == nullptr) {
+        continue;
+      }
+
+      cuBool_Index nrows, ncols;
+      cuBool_Matrix_Nrows(label_matrix, &nrows);
+      cuBool_Matrix_Ncols(label_matrix, &ncols);
+
+      cuBool_Matrix_New(&query.graph_transposed.back(), ncols, nrows);
+      cuBool_Matrix_Transpose(query.graph_transposed.back(), label_matrix, CUBOOL_HINT_NO);
+    }
+
+    // transpose automat matrices
+    query.automat_transposed.reserve(query.automat.size());
+    for (auto label_matrix : query.automat) {
+      query.automat_transposed.emplace_back();
+      if (label_matrix == nullptr) {
+        continue;
+      }
+
+      cuBool_Index nrows, ncols;
+      cuBool_Matrix_Nrows(label_matrix, &nrows);
+      cuBool_Matrix_Ncols(label_matrix, &ncols);
+
+      cuBool_Matrix_New(&query.automat_transposed.back(), ncols, nrows);
+      cuBool_Matrix_Transpose(query.automat_transposed.back(), label_matrix, CUBOOL_HINT_NO);
+    }
+  }
+
+  std::println("transposed sizes: {} {}", query.graph_transposed.size(), query.automat_transposed.size());
 
   if (source == std::numeric_limits<cuBool_Index>::max()) {
     query.start_states = std::move(inv_src_verts);
@@ -261,15 +302,44 @@ static void clear_query(Query &query) {
       cuBool_Matrix_Free(matrix);
     }
   }
+
+  if (query.transposed) {
+    for (cuBool_Matrix matrix : query.graph_transposed) {
+      if (matrix != nullptr) {
+        cuBool_Matrix_Free(matrix);
+      }
+    }
+    for (cuBool_Matrix matrix : query.automat_transposed) {
+      if (matrix != nullptr) {
+        cuBool_Matrix_Free(matrix);
+      }
+    }
+  }
 }
 
-static uint32_t make_query(const Query &query, uint32_t query_number) {
+static std::pair<uint32_t, double> make_query(const Query &query, uint32_t query_number) {
   std::string filename = std::format("{}/{}.txt", QUERIES_LOGS, query_number);
   std::ofstream log_file(filename);
 
-  auto recheable =
-    regular_path_query(query.graph, query.sourece_vertices, query.automat, query.start_states,
-                       query.inverse_lables, query.labels_inversed, log_file);
+  cuBool_Matrix recheable = nullptr;
+
+  static Timer make_query_timer {};
+
+  make_query_timer.mark();
+  if (query.transposed) {
+    std::println("transposed");
+    recheable = regular_path_query_with_transposed(query.graph, query.sourece_vertices,
+                                                   query.automat, query.start_states,
+                                                   query.graph_transposed,
+                                                   query.automat_transposed,
+                                                   query.inverse_lables, query.labels_inversed,
+                                                   log_file);
+  } else {
+    recheable = regular_path_query(query.graph, query.sourece_vertices,
+                                   query.automat, query.start_states,
+                                   query.inverse_lables, query.labels_inversed, log_file);
+  }
+  auto time = make_query_timer.measure();
 
   cuBool_Index automat_rows, graph_rows;
   cuBool_Matrix_Nrows(query.graph.front(), &graph_rows);
@@ -288,7 +358,7 @@ static uint32_t make_query(const Query &query, uint32_t query_number) {
   cuBool_Vector_Free(F);
   cuBool_Matrix_Free(recheable);
 
-  return answer;
+  return {answer, time};
 }
 
 bool benchmark() {
@@ -296,9 +366,6 @@ bool benchmark() {
 
   bool preloading = false;
   auto matrices = load_matrices(preloading);
-  // save_to_bin(matrices);
-  // return true;
-  // auto matrices = load_from_bin();
 
   std::set<uint32_t> too_big_queris = {115};
 
@@ -321,7 +388,7 @@ bool benchmark() {
     }
 
     bench_timer.mark();
-    bool status = load_query(query, query_number, matrices, preloading);
+    bool status = load_query(query, query_number, matrices, preloading, true);
     if (!status) {
       std::println(std::cerr, "query #{} skipped", query_number);
       clear_query(query);
@@ -330,9 +397,10 @@ bool benchmark() {
     double load_time = bench_timer.measure();
 
     bench_timer.mark();
-    auto result = make_query(query, query_number);
+    auto [result, make_query_time] = make_query(query, query_number);
     results_file << query_number << ' ' << result << '\n';
     double execute_time = bench_timer.measure();
+    execute_time = make_query_time;
 
     bench_timer.mark();
     clear_query(query);
@@ -344,8 +412,6 @@ bool benchmark() {
     total_load_time += load_time;
     total_execute_time += execute_time;
     total_clear_time += clear_time;
-
-    // std::println("free space after #3: {}", parse_int(execute_command("python3 ../parse_mem.py")));
   }
 
   std::cout << "\n\n\n";
