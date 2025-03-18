@@ -200,24 +200,5 @@ bool test() {
 }
 
 int main(int argc, char **argv) {
-  if (argc < 2 || std::string_view("test") == argv[1]) {
-    return test() ? 0 : -1;
-  } else if (argc >= 2 && std::string_view("bench") == argv[1]) {
-#if 0
-    std::jthread thread([](std::stop_token token) {
-      auto max_mem = get_used_memory();
-      std::ofstream log_file("mem_log.txt");
-      while (!token.stop_requested()) {
-        auto mem = get_used_memory();
-        if (mem > max_mem) {
-          std::println(log_file, "{}", mem);
-          max_mem = mem;
-        }
-      }
-    });
-#endif
-    benchmark();
-  } else {
-    std::println("unexpceted argument");
-  }
+  return test() ? 0 : -1;
 }

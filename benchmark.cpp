@@ -18,7 +18,6 @@
 
 #define RUNS 1
 
-#define WIKIDATA_DIR "/home/mitya/Documents/wiki-dataset/"
 #define QUERIES_LOGS "queries_logs"
 
 // #define QUERY_COUNT 660
@@ -442,4 +441,22 @@ bool benchmark() {
   cuBool_Finalize();
 
   return true;
+}
+
+int main(int argc, char **argv) {
+#if 0
+  std::jthread thread([](std::stop_token token) {
+    auto max_mem = get_used_memory();
+    std::ofstream log_file("mem_log.txt");
+    while (!token.stop_requested()) {
+      auto mem = get_used_memory();
+      if (mem > max_mem) {
+        std::println(log_file, "{}", mem);
+        max_mem = mem;
+      }
+    }
+  });
+#endif
+
+  return benchmark() ? 0 : 1;
 }
