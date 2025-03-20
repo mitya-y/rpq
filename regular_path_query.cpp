@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 #include <print>
 #include <set>
@@ -6,8 +7,6 @@
 #include "cubool.h"
 #include "regular_path_query.hpp"
 #include "timer.hpp"
-
-static Timer rpq_timer {};
 
 void print_cubool_matrix(cuBool_Matrix matrix, std::string name, bool print_full) {
   if (name != "") {
@@ -135,13 +134,14 @@ cuBool_Matrix regular_path_query_with_transposed(
   status = cuBool_Matrix_New(&result, automat_nodes_number, graph_nodes_number);
   assert(status == CUBOOL_STATUS_SUCCESS);
 
-  auto load_time = rpq_timer.measure();
-
   Timer add_timer, mxm_timer;
   double add_time = 0, mxm_time = 0;
 
+  uint32_t iter_number = 0;
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
+    iter_number++;
+
     std::swap(frontier, next_frontier);
 
     // clear next_frontier
@@ -182,7 +182,7 @@ cuBool_Matrix regular_path_query_with_transposed(
     cuBool_Matrix_Nvals(next_frontier, &states);
   }
 
-  std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
+  std::println(out, "iter_number = {}", iter_number);
 
   // std::println("add time = {}", add_time);
   // std::println("mxm time = {}", mxm_time);
