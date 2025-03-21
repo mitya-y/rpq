@@ -22,7 +22,7 @@ cuBool_Matrix par_regular_path_query(
   // work with inverted labels
   const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed,
   // for debug
-  std::ostream &out) {
+  std::optional<std::reference_wrapper<std::ostream>> out) {
   cuBool_Status status;
 
   rpq_timer.mark();
@@ -247,7 +247,10 @@ cuBool_Matrix par_regular_path_query(
     // print_cubool_matrix(reacheble, "reacheble", true);
   }
 
-  std::println(out, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
+  if (out.has_value()) {
+    auto &out_value = out.value().get();
+    std::println(out_value, "load time = {}, execute_time = {}", load_time, rpq_timer.measure());
+  }
 
   // free matrix necessary for algorithm
   for (auto &matrix : result_label_matrices) {

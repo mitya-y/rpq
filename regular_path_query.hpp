@@ -15,7 +15,7 @@ cuBool_Matrix regular_path_query_with_transposed(
   const std::vector<cuBool_Matrix> &automat_transposed,
 
   const std::vector<bool> &inversed_labels = {}, bool all_labels_are_inversed = false,
-  std::ostream &out = std::cout);
+  std::optional<std::reference_wrapper<std::ostream>> out = std::nullopt);
 
 cuBool_Matrix regular_path_query(
   // vector of sparse graph matrices for each label
@@ -24,7 +24,7 @@ cuBool_Matrix regular_path_query(
   const std::vector<cuBool_Matrix> &automat, const std::vector<cuBool_Index> &start_states,
 
   const std::vector<bool> &inversed_labels = {}, bool all_labels_are_inversed = false,
-  std::ostream &out = std::cout);
+  std::optional<std::reference_wrapper<std::ostream>> out = std::nullopt);
 
 // concurrent version
 cuBool_Matrix par_regular_path_query(
@@ -34,7 +34,7 @@ cuBool_Matrix par_regular_path_query(
   const std::vector<cuBool_Matrix> &automat, const std::vector<cuBool_Index> &start_states,
 
   const std::vector<bool> &inversed_labels = {}, bool all_labels_are_inversed = false,
-  std::ostream &out = std::cout);
+  std::optional<std::reference_wrapper<std::ostream>> out = std::nullopt);
 
 
 bool benchmark();

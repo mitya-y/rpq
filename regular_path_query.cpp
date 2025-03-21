@@ -72,7 +72,7 @@ cuBool_Matrix regular_path_query_with_transposed(
   const std::vector<cuBool_Matrix> &automat_transposed,
 
   const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed,
-  std::ostream &out) {
+  std::optional<std::reference_wrapper<std::ostream>> out) {
   cuBool_Status status;
 
   auto inversed_labels = inversed_labels_input;
@@ -182,7 +182,18 @@ cuBool_Matrix regular_path_query_with_transposed(
     cuBool_Matrix_Nvals(next_frontier, &states);
   }
 
-  std::println(out, "iter_number = {}", iter_number);
+  if (out.has_value()) {
+    auto &out_value = out.value().get();
+
+    std::println(out_value, "iter_number = {}", iter_number);
+    for (auto label_matrix : graph) {
+      cuBool_Index nvals, nrows, ncols;
+      cuBool_Matrix_Nvals(label_matrix, &nvals);
+      cuBool_Matrix_Nrows(label_matrix, &nrows);
+      cuBool_Matrix_Ncols(label_matrix, &ncols);
+      std::println(out_value, "{} {} {}", nvals, nrows, ncols);
+    }
+  }
 
   // std::println("add time = {}", add_time);
   // std::println("mxm time = {}", mxm_time);
@@ -205,7 +216,7 @@ cuBool_Matrix regular_path_query(
   // work with inverted labels
   const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed,
   // for debug
-  std::ostream &out) {
+  std::optional<std::reference_wrapper<std::ostream>> out) {
   cuBool_Status status;
 
   // transpose graph matrices
