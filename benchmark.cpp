@@ -16,14 +16,7 @@
 #include "regular_path_query.hpp"
 #include "timer.hpp"
 
-#define RUNS 1
-
 #define QUERIES_LOGS "queries_logs"
-
-// #define QUERY_COUNT 660
-// same as for CPU bench on PC with 16gb RAM
-#define QUERY_COUNT 520
-#define PROP_COUNT 1395
 
 struct MatrixData {
   bool _loaded = false;
@@ -88,12 +81,12 @@ bool MatrixData::copy_to_gpu(cuBool_Matrix *matrix) const {
 }
 
 static Wikidata load_matrices(bool load_at_gpu = false) {
-  Wikidata matrices(PROP_COUNT + 1);
+  Wikidata matrices(BENCH_LABEL_COUNT + 1);
   Timer load_matrices_timer {};
 
   load_matrices_timer.mark();
   std::cout << "loading at RAM\n";
-  for (uint32_t query_number = 0; query_number < QUERY_COUNT; query_number++) {
+  for (uint32_t query_number = 0; query_number < BENCH_QUERY_COUNT; query_number++) {
     std::cout << "\rloaded query # " << query_number;
     std::flush(std::cout);
 
@@ -107,7 +100,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
     int tmp1, tmp2;
     query_file >> tmp1 >> tmp2;
     if (tmp1 == 0 && tmp2 == 0) {
-      continue;
+      // continue;
     }
 
     // read start vertices and start states
@@ -216,7 +209,8 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
   cuBool_Index source = 0, dest = 0;
   query_file >> source >> dest;
   if (source == 0 && dest == 0) {
-    return {false, 0};
+    source = 1;
+    // return {false, 0};
   }
   source--;
   dest--;
@@ -322,6 +316,7 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
 }
 
 void Query::clear() {
+  // std::println("clear 1 graph");
   if (_matrices_was_loaded) {
     for (auto matrix : _graph) {
       if (matrix != nullptr) {
@@ -330,12 +325,14 @@ void Query::clear() {
     }
   }
 
+  // std::println("clear 2 automat");
   for (auto matrix : _automat) {
     if (matrix != nullptr) {
       cuBool_Matrix_Free(matrix);
     }
   }
 
+  // std::println("clear 3 transposed");
   if (_transposed) {
     for (cuBool_Matrix matrix : _graph_transposed) {
       if (matrix != nullptr) {
@@ -409,7 +406,7 @@ bool benchmark() {
   std::filesystem::create_directory(QUERIES_LOGS);
 
   std::println("query_number execute_time load_time result");
-  for (uint32_t query_number = 1; query_number <= QUERY_COUNT; query_number++) {
+  for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
   // for (uint32_t query_number = 207; query_number <= 207; query_number++) {
     if (too_big_queris.contains(query_number)) {
       continue;
@@ -442,6 +439,7 @@ bool benchmark() {
 }
 
 int main(int argc, char **argv) {
+  std::println("Dataset: {}\n", BENCH_DATASET_DIR);
 #if 0
   std::jthread thread([](std::stop_token token) {
     auto max_mem = get_used_memory();
