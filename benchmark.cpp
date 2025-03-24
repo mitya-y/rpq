@@ -97,7 +97,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
     std::cout << "\rloaded query # " << query_number;
     std::flush(std::cout);
 
-    std::string filename = std::format("{}{}{}/meta.txt", WIKIDATA_DIR, "Queries/", query_number);
+    std::string filename = std::format("{}{}{}/meta.txt", BENCH_DATASET_DIR, "/Queries/", query_number);
     std::ifstream query_file(filename);
     if (not query_file) {
       continue;
@@ -125,7 +125,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
       query_file >> label;
       label = std::abs(label);
 
-      std::string filename = std::format("{}{}{}.txt", WIKIDATA_DIR, "Wikidata/", label);
+      std::string filename = std::format("{}{}{}.txt", BENCH_DATASET_DIR, "/Graph/", label);
       matrices[label].load_to_cpu(filename);
     }
   }
@@ -207,7 +207,7 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
   _query_timer.mark();
   _query_number = query_number;
 
-  std::string filename = std::format("{}{}{}/meta.txt", WIKIDATA_DIR, "Queries/", query_number);
+  std::string filename = std::format("{}{}{}/meta.txt", BENCH_DATASET_DIR, "/Queries/", query_number);
   std::ifstream query_file(filename);
   if (!query_file) {
     return {false, 0};
@@ -256,8 +256,6 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
 
   for (int i = 0; i < labels_number; i++) {
     uint32_t label = _labels[i];
-
-    // std::string filename = std::format("{}{}{}.txt", WIKIDATA_DIR, "Wikidata/", label);
     if (!preloaded) {
       if (not matrices[label].copy_to_gpu(&_graph[i])) {
         return {false, 0};
@@ -266,7 +264,7 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
       _graph[i] = matrices[i]._matrix;
     }
 
-    filename = std::format("{}{}{}/{}.txt", WIKIDATA_DIR, "Queries/", query_number,
+    filename = std::format("{}{}{}/{}.txt", BENCH_DATASET_DIR, "/Queries/", query_number,
                            _inverse_lables[i] ? -(int)label : (int)label);
     MatrixData data;
     if (not data.load_to_cpu(filename) || not data.copy_to_gpu(&_automat[i])) {

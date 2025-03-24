@@ -57,5 +57,5 @@ target_include_directories(${BENCHMARK_TARGET} PUBLIC fast_matrix_market/include
 # thread pool library
 target_include_directories(${BENCHMARK_TARGET} PUBLIC thread-pool/include)
 
-set(RPQ_BENCH_WIKIDATA_PATH "/home/mitya/Documents/wiki-dataset/" CACHE STRING "Path to wiki-dataset")
-target_compile_definitions(${BENCHMARK_TARGET} PUBLIC WIKIDATA_DIR="${RPQ_BENCH_WIKIDATA_PATH}")
+set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/wikidata" CACHE STRING "Path to dataset")
+target_compile_definitions(${BENCHMARK_TARGET} PUBLIC BENCH_DATASET_DIR="${RPQ_BENCH_DATASET_PATH}")
