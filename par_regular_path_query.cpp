@@ -14,18 +14,18 @@
 
 static Timer rpq_timer {};
 
-cuBool_Matrix par_regular_path_query(
+cuBool_Matrix par_regular_path_query_transposed(
   // vector of sparse graph matrices for each label
   const std::vector<cuBool_Matrix> &graph, const std::vector<cuBool_Index> &source_vertices,
   // vector of sparse automat matrices for each label
   const std::vector<cuBool_Matrix> &automat, const std::vector<cuBool_Index> &start_states,
-  // work with inverted labels
+  // transposed matrices for graph and automat
+  const std::vector<cuBool_Matrix> &graph_transposed,
+  const std::vector<cuBool_Matrix> &automat_transposed,
+
   const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed,
-  // for debug
   std::optional<std::reference_wrapper<std::ostream>> out) {
   cuBool_Status status;
-
-  rpq_timer.mark();
 
   auto inversed_labels = inversed_labels_input;
   inversed_labels.resize(std::max(graph.size(), automat.size()));
@@ -36,67 +36,11 @@ cuBool_Matrix par_regular_path_query(
     inversed_labels[i] = is_inverse;
   }
 
+  rpq_timer.mark();
+
   BS::thread_pool pool;
 
   std::vector<std::future<cuBool_Status>> futures;
-
-  // transpose graph matrices
-  std::vector<cuBool_Matrix> graph_transpsed;
-  graph_transpsed.reserve(graph.size());
-  for (uint32_t i = 0; i < graph.size(); i++) {
-    graph_transpsed.emplace_back();
-
-    // we use transposed graph matrix only if label is inversed
-    if (!inversed_labels[i]) {
-      continue;
-    }
-
-    auto label_matrix = graph[i];
-    if (label_matrix == nullptr) {
-      continue;
-    }
-
-    if (!inversed_labels[i]) {
-      continue;
-    }
-
-    cuBool_Index nrows, ncols;
-    cuBool_Matrix_Nrows(label_matrix, &nrows);
-    cuBool_Matrix_Ncols(label_matrix, &ncols);
-
-    status = cuBool_Matrix_New(&graph_transpsed.back(), ncols, nrows);
-    assert(status == CUBOOL_STATUS_SUCCESS);
-
-    futures.push_back(pool.submit_task([matrix = graph_transpsed.back(), label_matrix]() {
-      auto status = cuBool_Matrix_Transpose(matrix, label_matrix, CUBOOL_HINT_NO);
-      return status;
-    }));
-  }
-
-  // transpose automat matrices
-  std::vector<cuBool_Matrix> automat_transpsed;
-  automat_transpsed.reserve(automat.size());
-  // if all lables are transposed we don't use transposed automat matrices
-  if (!all_labels_are_inversed) {
-    for (auto label_matrix : automat) {
-      automat_transpsed.emplace_back();
-      if (label_matrix == nullptr) {
-        continue;
-      }
-
-      cuBool_Index nrows, ncols;
-      cuBool_Matrix_Nrows(label_matrix, &nrows);
-      cuBool_Matrix_Ncols(label_matrix, &ncols);
-
-      status = cuBool_Matrix_New(&automat_transpsed.back(), ncols, nrows);
-      assert(status == CUBOOL_STATUS_SUCCESS);
-
-      futures.push_back(pool.submit_task([matrix = automat_transpsed.back(), label_matrix]() {
-        auto status = cuBool_Matrix_Transpose(matrix, label_matrix, CUBOOL_HINT_NO);
-        return status;
-      }));
-    }
-  }
 
   cuBool_Index graph_nodes_number = 0;
   cuBool_Index automat_nodes_number = 0;
@@ -179,14 +123,14 @@ cuBool_Matrix par_regular_path_query(
 
       futures.push_back(pool.submit_task(
         [&, result = result_label_matrices[i], util = util_label_matrices[i], i]() mutable {
-          cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transpsed[i];
+          cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transposed[i];
           status = cuBool_MxM(util, automat_matrix, frontier, CUBOOL_HINT_NO);
           if (status != CUBOOL_STATUS_SUCCESS) {
             return status;
           }
 
           // we want: next_frontier += (symbol_frontier * graph[i]) & (!reachible)
-          cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transpsed[i] : graph[i];
+          cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transposed[i] : graph[i];
           status = cuBool_MxM(result, util, graph_matrix, CUBOOL_HINT_NO);
           if (status != CUBOOL_STATUS_SUCCESS) {
             return status;
@@ -267,16 +211,77 @@ cuBool_Matrix par_regular_path_query(
   cuBool_Matrix_Free(frontier);
   cuBool_Matrix_Free(symbol_frontier);
 
-  for (cuBool_Matrix matrix : graph_transpsed) {
+  return reacheble;
+}
+
+cuBool_Matrix par_regular_path_query(
+  // vector of sparse graph matrices for each label
+  const std::vector<cuBool_Matrix> &graph, const std::vector<cuBool_Index> &source_vertices,
+  // vector of sparse automat matrices for each label
+  const std::vector<cuBool_Matrix> &automat, const std::vector<cuBool_Index> &start_states,
+  // work with inverted labels
+  const std::vector<bool> &inversed_labels_input, bool all_labels_are_inversed,
+  // for debug
+  std::optional<std::reference_wrapper<std::ostream>> out) {
+  cuBool_Status status;
+
+  // transpose graph matrices
+  std::vector<cuBool_Matrix> graph_transposed;
+  graph_transposed.reserve(graph.size());
+  for (uint32_t i = 0; i < graph.size(); i++) {
+    graph_transposed.emplace_back();
+
+    auto label_matrix = graph[i];
+    if (label_matrix == nullptr) {
+      continue;
+    }
+
+    cuBool_Index nrows, ncols;
+    cuBool_Matrix_Nrows(label_matrix, &nrows);
+    cuBool_Matrix_Ncols(label_matrix, &ncols);
+
+    status = cuBool_Matrix_New(&graph_transposed.back(), ncols, nrows);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+    status = cuBool_Matrix_Transpose(graph_transposed.back(), label_matrix, CUBOOL_HINT_NO);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+  }
+
+  // transpose automat matrices
+  std::vector<cuBool_Matrix> automat_transposed;
+  automat_transposed.reserve(automat.size());
+  for (auto label_matrix : automat) {
+    automat_transposed.emplace_back();
+    if (label_matrix == nullptr) {
+      continue;
+    }
+
+    cuBool_Index nrows, ncols;
+    cuBool_Matrix_Nrows(label_matrix, &nrows);
+    cuBool_Matrix_Ncols(label_matrix, &ncols);
+
+    status = cuBool_Matrix_New(&automat_transposed.back(), ncols, nrows);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+    status = cuBool_Matrix_Transpose(automat_transposed.back(), label_matrix, CUBOOL_HINT_NO);
+    assert(status == CUBOOL_STATUS_SUCCESS);
+  }
+
+  auto result = par_regular_path_query_transposed(
+    graph, source_vertices,
+    automat, start_states,
+    graph_transposed, automat_transposed,
+    inversed_labels_input, all_labels_are_inversed,
+    out);
+
+  for (cuBool_Matrix matrix : graph_transposed) {
     if (matrix != nullptr) {
       cuBool_Matrix_Free(matrix);
     }
   }
-  for (cuBool_Matrix matrix : automat_transpsed) {
+  for (cuBool_Matrix matrix : automat_transposed) {
     if (matrix != nullptr) {
       cuBool_Matrix_Free(matrix);
     }
   }
 
-  return reacheble;
+  return result;
 }

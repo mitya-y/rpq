@@ -167,6 +167,7 @@ cuBool_Matrix regular_path_query_with_transposed(
       assert(status == CUBOOL_STATUS_SUCCESS);
       mxm_time += mxm_timer.measure();
       // apply invert mask
+      // TODO: maybe apply mask after
       status = cuBool_Matrix_EWiseMulInverted(result, next_frontier, reacheble, CUBOOL_HINT_NO);
       assert(status == CUBOOL_STATUS_SUCCESS);
       std::swap(result, next_frontier);
