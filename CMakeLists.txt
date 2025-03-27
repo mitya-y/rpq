@@ -33,6 +33,11 @@ target_link_libraries(${TESTS_TARGET} PUBLIC cubool)
 
 target_sources(${TESTS_TARGET} PUBLIC tests.cpp)
 target_sources(${TESTS_TARGET} PUBLIC regular_path_query.cpp)
+target_sources(${TESTS_TARGET} PUBLIC par_regular_path_query.cpp)
+
+# thread pool library
+target_include_directories(${TESTS_TARGET} PUBLIC thread-pool/include)
+
 
 # load .mtx format utility
 target_include_directories(${TESTS_TARGET} PUBLIC fast_matrix_market/include)
@@ -47,9 +52,9 @@ target_include_directories(${BENCHMARK_TARGET} PUBLIC cuBool/cubool/include/cubo
 target_link_directories(${BENCHMARK_TARGET} PUBLIC build/cuBool/cubool)
 target_link_libraries(${BENCHMARK_TARGET} PUBLIC cubool)
 
+target_sources(${BENCHMARK_TARGET} PUBLIC benchmark.cpp)
 target_sources(${BENCHMARK_TARGET} PUBLIC regular_path_query.cpp)
 target_sources(${BENCHMARK_TARGET} PUBLIC par_regular_path_query.cpp)
-target_sources(${BENCHMARK_TARGET} PUBLIC benchmark.cpp)
 
 # load .mtx format utility
 target_include_directories(${BENCHMARK_TARGET} PUBLIC fast_matrix_market/include)
@@ -58,13 +63,13 @@ target_include_directories(${BENCHMARK_TARGET} PUBLIC fast_matrix_market/include
 target_include_directories(${BENCHMARK_TARGET} PUBLIC thread-pool/include)
 
 # benchmark dataset options
-# set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/wikidata" CACHE STRING "Path to dataset")
-# set(RPQ_BENCH_QUERY_COUNT "520" CACHE STRING "NumberCACHE STRING of queries (can be extra)")
-# set(RPQ_BENCH_LABEL_COUNT "1395" CACHE STRING "Number of labels (can be extra)")
+set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/wikidata" CACHE STRING "Path to dataset")
+set(RPQ_BENCH_QUERY_COUNT "520" CACHE STRING "NumberCACHE STRING of queries (can be extra)")
+set(RPQ_BENCH_LABEL_COUNT "1395" CACHE STRING "Number of labels (can be extra)")
 
-set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/rpqbench" CACHE STRING "Path to dataset")
-set(RPQ_BENCH_QUERY_COUNT "13" CACHE STRING "Number of queries (can be extra)")
-set(RPQ_BENCH_LABEL_COUNT "10" CACHE STRING "Number of labels (can be extra)")
+# set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/rpqbench" CACHE STRING "Path to dataset")
+# set(RPQ_BENCH_QUERY_COUNT "13" CACHE STRING "Number of queries (can be extra)")
+# set(RPQ_BENCH_LABEL_COUNT "10" CACHE STRING "Number of labels (can be extra)")
 
 target_compile_definitions(${BENCHMARK_TARGET} PUBLIC BENCH_DATASET_DIR="${RPQ_BENCH_DATASET_PATH}")
 target_compile_definitions(${BENCHMARK_TARGET} PUBLIC BENCH_LABEL_COUNT=${RPQ_BENCH_LABEL_COUNT})

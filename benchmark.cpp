@@ -406,8 +406,8 @@ bool benchmark() {
   std::filesystem::create_directory(QUERIES_LOGS);
 
   std::println("query_number execute_time load_time result");
-  for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
-  // for (uint32_t query_number = 207; query_number <= 207; query_number++) {
+  // for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
+  for (uint32_t query_number = 207; query_number <= 207; query_number++) {
     if (too_big_queris.contains(query_number)) {
       continue;
     }
