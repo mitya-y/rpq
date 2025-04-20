@@ -63,13 +63,13 @@ target_include_directories(${BENCHMARK_TARGET} PUBLIC fast_matrix_market/include
 target_include_directories(${BENCHMARK_TARGET} PUBLIC thread-pool/include)
 
 # benchmark dataset options
-set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/wikidata" CACHE STRING "Path to dataset")
-set(RPQ_BENCH_QUERY_COUNT "520" CACHE STRING "NumberCACHE STRING of queries (can be extra)")
-set(RPQ_BENCH_LABEL_COUNT "1395" CACHE STRING "Number of labels (can be extra)")
+# set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/wikidata" CACHE STRING "Path to dataset")
+# set(RPQ_BENCH_QUERY_COUNT "520" CACHE STRING "NumberCACHE STRING of queries (can be extra)")
+# set(RPQ_BENCH_LABEL_COUNT "1395" CACHE STRING "Number of labels (can be extra)")
 
-# set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/rpqbench" CACHE STRING "Path to dataset")
-# set(RPQ_BENCH_QUERY_COUNT "13" CACHE STRING "Number of queries (can be extra)")
-# set(RPQ_BENCH_LABEL_COUNT "10" CACHE STRING "Number of labels (can be extra)")
+set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/rpqbench" CACHE STRING "Path to dataset")
+set(RPQ_BENCH_QUERY_COUNT "19999" CACHE STRING "Number of queries (can be extra)")
+set(RPQ_BENCH_LABEL_COUNT "9" CACHE STRING "Number of labels (can be extra)")
 
 target_compile_definitions(${BENCHMARK_TARGET} PUBLIC BENCH_DATASET_DIR="${RPQ_BENCH_DATASET_PATH}")
 target_compile_definitions(${BENCHMARK_TARGET} PUBLIC BENCH_LABEL_COUNT=${RPQ_BENCH_LABEL_COUNT})

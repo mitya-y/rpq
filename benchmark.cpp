@@ -24,7 +24,7 @@ struct MatrixData {
   std::vector<cuBool_Index> _rows, _cols;
   cuBool_Index _nvals = 0;
 
-  cuBool_Matrix _matrix = nullptr;
+  cuBool_Matrix _matrix = nullptr, _transposed = nullptr;
 
   double sizeMb() const {
     return (sizeof(cuBool_Index) * _nvals * 2) / 1'000'000.0;
@@ -80,13 +80,13 @@ bool MatrixData::copy_to_gpu(cuBool_Matrix *matrix) const {
   return true;
 }
 
-static Wikidata load_matrices(bool load_at_gpu = false) {
+static Wikidata load_matrices(bool load_at_gpu = false, bool pretransposed = false) {
   Wikidata matrices(BENCH_LABEL_COUNT + 1);
   Timer load_matrices_timer {};
 
   load_matrices_timer.mark();
   std::cout << "loading at RAM\n";
-  for (uint32_t query_number = 0; query_number < BENCH_QUERY_COUNT; query_number++) {
+  for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
     std::cout << "\rloaded query # " << query_number;
     std::flush(std::cout);
 
@@ -100,7 +100,7 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
     int tmp1, tmp2;
     query_file >> tmp1 >> tmp2;
     if (tmp1 == 0 && tmp2 == 0) {
-      // continue;
+      continue;
     }
 
     // read start vertices and start states
@@ -128,9 +128,10 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
 
   if (load_at_gpu) {
     load_matrices_timer.mark();
-    std::cout << "loading at VRAM\n";
+    std::println("loading at VRAM");
+    uint32_t initial_free_mem = get_used_memory();
     for (int i = 0; i < matrices.size(); i++) {
-      uint32_t free_mem = parse_int(execute_command("python3 parse_mem.py"));
+      uint32_t free_mem = get_used_memory();
 
       auto &data = matrices[i];
       if (!data._loaded) {
@@ -139,12 +140,25 @@ static Wikidata load_matrices(bool load_at_gpu = false) {
 
       data.load_to_gpu();
 
-      uint32_t new_free_mem = parse_int(execute_command("python3 parse_mem.py"));
-      std::println("query #{}: now used: {}, diff used: {}, actual size: {}", i, new_free_mem,
-                   new_free_mem - free_mem, data.sizeMb());
+      if (pretransposed && data._matrix != nullptr) {
+        cuBool_Index nrows, ncols;
+        cuBool_Matrix_Nrows(data._matrix, &nrows);
+        cuBool_Matrix_Ncols(data._matrix, &ncols);
+
+        cuBool_Matrix_New(&data._transposed, ncols, nrows);
+        cuBool_Matrix_Transpose(data._transposed, data._matrix, CUBOOL_HINT_NO);
+      }
+
+      uint32_t new_free_mem = get_used_memory();
+      std::print("\r");
+      std::print("matrix #{}: now used: {}, diff used: {}, actual size: {}", i, new_free_mem,
+                 new_free_mem - free_mem, data.sizeMb());
+      std::flush(std::cout);
     }
     elapsed = load_matrices_timer.measure();
-    std::cout << "matrices loaded at GPU, time: " << elapsed << "s\n";
+    std::print("\r");
+    std::println("matrices loaded at GPU, time: {}s, used memory: {}",
+                  elapsed, get_used_memory() - initial_free_mem);
   }
 
   return matrices;
@@ -255,7 +269,7 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
         return {false, 0};
       }
     } else {
-      _graph[i] = matrices[i]._matrix;
+      _graph[i] = matrices[label]._matrix;
     }
 
     filename = std::format("{}{}{}/{}.txt", BENCH_DATASET_DIR, "/Queries/", query_number,
@@ -268,19 +282,26 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
 
   if (transpose) {
     _graph_transposed.reserve(_graph.size());
-    for (auto label_matrix : _graph) {
-      _graph_transposed.emplace_back();
+    if (!preloaded) {
+      for (auto label_matrix : _graph) {
+        _graph_transposed.emplace_back();
 
-      if (label_matrix == nullptr) {
-        continue;
+        if (label_matrix == nullptr) {
+          continue;
+        }
+
+        cuBool_Index nrows, ncols;
+        cuBool_Matrix_Nrows(label_matrix, &nrows);
+        cuBool_Matrix_Ncols(label_matrix, &ncols);
+
+        cuBool_Matrix_New(&_graph_transposed.back(), ncols, nrows);
+        cuBool_Matrix_Transpose(_graph_transposed.back(), label_matrix, CUBOOL_HINT_NO);
       }
-
-      cuBool_Index nrows, ncols;
-      cuBool_Matrix_Nrows(label_matrix, &nrows);
-      cuBool_Matrix_Ncols(label_matrix, &ncols);
-
-      cuBool_Matrix_New(&_graph_transposed.back(), ncols, nrows);
-      cuBool_Matrix_Transpose(_graph_transposed.back(), label_matrix, CUBOOL_HINT_NO);
+    } else {
+      for (int i = 0; i < labels_number; i++) {
+        uint32_t label = _labels[i];
+        _graph_transposed[i] = matrices[label]._transposed;
+      }
     }
 
     // transpose automat matrices
@@ -316,32 +337,34 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
 }
 
 void Query::clear() {
-  // std::println("clear 1 graph");
   if (_matrices_was_loaded) {
-    for (auto matrix : _graph) {
+    for (auto &matrix : _graph) {
       if (matrix != nullptr) {
         cuBool_Matrix_Free(matrix);
+        matrix = nullptr;
       }
     }
   }
 
-  // std::println("clear 2 automat");
-  for (auto matrix : _automat) {
+  for (auto &matrix : _automat) {
     if (matrix != nullptr) {
       cuBool_Matrix_Free(matrix);
+      matrix = nullptr;
     }
   }
 
   // std::println("clear 3 transposed");
   if (_transposed) {
-    for (cuBool_Matrix matrix : _graph_transposed) {
+    for (auto &matrix : _graph_transposed) {
       if (matrix != nullptr) {
         cuBool_Matrix_Free(matrix);
+        matrix = nullptr;
       }
     }
-    for (cuBool_Matrix matrix : _automat_transposed) {
+    for (auto &matrix : _automat_transposed) {
       if (matrix != nullptr) {
         cuBool_Matrix_Free(matrix);
+        matrix = nullptr;
       }
     }
   }
@@ -393,11 +416,12 @@ std::pair<uint32_t, double> Query::execute() {
 bool benchmark() {
   cuBool_Initialize(CUBOOL_HINT_NO);
 
-  bool preloading = false;
+  bool preloading = true;
   bool pretransposed = true;
-  auto matrices = load_matrices(preloading);
+  auto matrices = load_matrices(preloading, pretransposed);
 
   std::set<uint32_t> too_big_queris = {115};
+  too_big_queris = {};
 
   double total_load_time = 0;
   double total_execute_time = 0;
@@ -406,8 +430,8 @@ bool benchmark() {
   std::filesystem::create_directory(QUERIES_LOGS);
 
   std::println("query_number execute_time load_time result");
-  // for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
-  for (uint32_t query_number = 207; query_number <= 207; query_number++) {
+  for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
+  // for (uint32_t query_number = 207; query_number <= 207; query_number++) {
     if (too_big_queris.contains(query_number)) {
       continue;
     }
