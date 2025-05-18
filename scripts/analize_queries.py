@@ -59,6 +59,9 @@ def nvals_infl(queries: list[Query], min_bound = -math.inf):
     plt.legend()
     plt.show()
 
+QUERIES_TYPES_NUM = 20
+QUERIES_NUM_PER_TYPE = 100
+
 def iter_number_infl(queries: list[Query], min_bound = -math.inf):
     values = [(query.iter_number, query.execute_time)
               for query in queries if query.execute_time > min_bound]
@@ -66,7 +69,9 @@ def iter_number_infl(queries: list[Query], min_bound = -math.inf):
     x = [val[0] for val in values]
     y = [val[1] for val in values]
     plt.figure(figsize=(8, 4))
-    plt.plot(x, y, 'ro', label="exec_time(iter_number)", markersize=4)
+    plt.plot(x, y, 'o', label="exec_time(iter_number)", markersize=4, color='blue')
+    x11, y11 = x[1000:1100], y[1000:1100]
+    plt.plot(x11, y11, 'o', label="11 type", markersize=4, color='red')
     plt.legend()
     plt.show()
 
@@ -80,6 +85,10 @@ def unique_ncols(queries: list[Query]):
 
 queries = load_queries()
 
-nvals_infl(queries)
-iter_number_infl(queries)
+# nvals_infl(queries)
 # unique_ncols(queries)
+iter_number_infl(queries)
+
+for type in range(9, 20):
+    print(f"type {type + 1} ({type * 100} : {(type + 1) * 100})")
+    iter_number_infl(queries[type * 100 : (type + 1) * 100])

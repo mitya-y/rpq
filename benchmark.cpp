@@ -187,7 +187,7 @@ struct Query {
   Timer _query_timer;
 
   std::pair<bool, double> load(uint32_t query_number, const Wikidata &matrices,
-                               bool preloaded = false, bool transpose = true);
+                               bool preloaded = false, bool transpose = true, bool pretransposed = false);
   std::pair<uint32_t, double> execute();
   void clear();
 
@@ -210,7 +210,7 @@ struct Query {
 };
 
 std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matrices,
-                                    bool preloaded, bool transpose) {
+                                    bool preloaded, bool transpose, bool pretransposed) {
   _query_timer.mark();
   _query_number = query_number;
 
@@ -282,7 +282,7 @@ std::pair<bool, double> Query::load(uint32_t query_number, const Wikidata &matri
 
   if (transpose) {
     _graph_transposed.reserve(_graph.size());
-    if (!preloaded) {
+    if (!pretransposed) {
       for (auto label_matrix : _graph) {
         _graph_transposed.emplace_back();
 
@@ -416,9 +416,10 @@ std::pair<uint32_t, double> Query::execute() {
 bool benchmark() {
   cuBool_Initialize(CUBOOL_HINT_NO);
 
-  bool preloading = true;
+  bool preloading = false;
+  bool pretransposed_gpu = false;
   bool pretransposed = true;
-  auto matrices = load_matrices(preloading, pretransposed);
+  auto matrices = load_matrices(preloading, pretransposed_gpu);
 
   std::set<uint32_t> too_big_queris = {115};
   too_big_queris = {};
@@ -430,15 +431,15 @@ bool benchmark() {
   std::filesystem::create_directory(QUERIES_LOGS);
 
   std::println("query_number execute_time load_time result");
-  for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
-  // for (uint32_t query_number = 207; query_number <= 207; query_number++) {
+  // for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
+  for (uint32_t query_number = 1003; query_number <= 1003; query_number++) {
     if (too_big_queris.contains(query_number)) {
       continue;
     }
 
     Query query;
     auto [load_successfully, load_time] =
-      query.load(query_number, matrices, preloading, pretransposed);
+      query.load(query_number, matrices, preloading, pretransposed, pretransposed_gpu);
     if (!load_successfully) {
       std::println("{} skipped", query_number);
       continue;
@@ -456,6 +457,10 @@ bool benchmark() {
   std::cout << "\n\n\n";
   std::println("total load time: {}, total execute time: {}\n",
                total_load_time, total_execute_time);
+
+  std::ofstream total_time_file("total_time_file.txt");
+  std::println(total_time_file, "total load time: {}, total execute time: {}\n",
+                                total_load_time, total_execute_time);
 
   cuBool_Finalize();
 

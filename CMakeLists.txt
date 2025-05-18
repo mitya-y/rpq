@@ -11,6 +11,8 @@ if(RPQ_RUN_ON_CPU)
   set(CUBOOL_WITH_SEQUENTIAL ON)
 endif()
 
+set(CUBOOL_COPY_TO_PY_PACKAGE OFF)
+
 set(CUBOOL_USE_NSPARSE_MERGE_FUNCTOR OFF)
 
 add_subdirectory(cuBool)
@@ -67,8 +69,13 @@ target_include_directories(${BENCHMARK_TARGET} PUBLIC thread-pool/include)
 # set(RPQ_BENCH_QUERY_COUNT "520" CACHE STRING "NumberCACHE STRING of queries (can be extra)")
 # set(RPQ_BENCH_LABEL_COUNT "1395" CACHE STRING "Number of labels (can be extra)")
 
-set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/rpqbench" CACHE STRING "Path to dataset")
-set(RPQ_BENCH_QUERY_COUNT "19999" CACHE STRING "Number of queries (can be extra)")
+# set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/rpqbench" CACHE STRING "Path to dataset")
+# set(RPQ_BENCH_QUERY_COUNT "20000" CACHE STRING "Number of queries (can be extra)")
+# set(RPQ_BENCH_LABEL_COUNT "9" CACHE STRING "Number of labels (can be extra)")
+
+set(RPQ_BENCH_DATASET_PATH "/home/mitya/Documents/datasets/rpqbench-100kk" CACHE STRING "Path to dataset")
+# set(RPQ_BENCH_QUERY_COUNT "400" CACHE STRING "Number of queries (can be extra)")
+set(RPQ_BENCH_QUERY_COUNT "2000" CACHE STRING "Number of queries (can be extra)")
 set(RPQ_BENCH_LABEL_COUNT "9" CACHE STRING "Number of labels (can be extra)")
 
 target_compile_definitions(${BENCHMARK_TARGET} PUBLIC BENCH_DATASET_DIR="${RPQ_BENCH_DATASET_PATH}")
