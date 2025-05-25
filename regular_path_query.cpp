@@ -137,6 +137,7 @@ cuBool_Matrix regular_path_query_with_transposed(
   Timer add_timer, mxm_timer;
   double add_time = 0, mxm_time = 0;
 
+  uint32_t muls_number = 0;
   uint32_t iter_number = 0;
   const auto label_number = std::min(graph.size(), automat.size());
   while (states > 0) {
@@ -156,6 +157,7 @@ cuBool_Matrix regular_path_query_with_transposed(
       mxm_timer.mark();
       cuBool_Matrix automat_matrix = all_labels_are_inversed ? automat[i] : automat_transposed[i];
       status = cuBool_MxM(symbol_frontier, automat_matrix, frontier, CUBOOL_HINT_NO);
+      muls_number++;
       assert(status == CUBOOL_STATUS_SUCCESS);
 
       // TODO: check states here
@@ -165,6 +167,7 @@ cuBool_Matrix regular_path_query_with_transposed(
       cuBool_Matrix graph_matrix = inversed_labels[i] ? graph_transposed[i] : graph[i];
       status = cuBool_MxM(next_frontier, symbol_frontier, graph_matrix, CUBOOL_HINT_ACCUMULATE);
       assert(status == CUBOOL_STATUS_SUCCESS);
+      muls_number++;
       mxm_time += mxm_timer.measure();
       // apply invert mask
       // TODO: maybe apply mask after
@@ -187,6 +190,7 @@ cuBool_Matrix regular_path_query_with_transposed(
     auto &out_value = out.value().get();
 
     std::println(out_value, "iter_number = {}", iter_number);
+    std::println(out_value, "muls_number = {}", muls_number);
     for (auto label_matrix : graph) {
       cuBool_Index nvals, nrows, ncols;
       cuBool_Matrix_Nvals(label_matrix, &nvals);

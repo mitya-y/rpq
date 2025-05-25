@@ -17,6 +17,7 @@ class Query:
     execute_time: float
     load_time: float
     iter_number: int
+    mul_number: int
     result: int
 
     nvals_per_iter: int
@@ -27,7 +28,7 @@ class Query:
 def load_queries() -> list[Query]:
     queries: list[Query] = []
 
-    with open("data/result.txt") as file:
+    with open("data/gpu/rpqbench-10kk/result.txt") as file:
         for line in file:
             queries.append(Query())
             query = queries[-1]
@@ -38,8 +39,9 @@ def load_queries() -> list[Query]:
             query.load_time = float(values[2])
             query.result = int(values[3])
 
-            query_file = open(f"data/queries_logs/{query.number}.txt")
+            query_file = open(f"data/gpu/rpqbench-10kk/queries_logs/{query.number}.txt")
             query.iter_number = int(query_file.readline().split('=')[-1])
+            query.mul_number = int(query_file.readline().split('=')[-1])
             for matrix_line in query_file:
                 query.matrices.append(Matrix(*map(int, matrix_line.split())))
 
@@ -75,6 +77,27 @@ def iter_number_infl(queries: list[Query], min_bound = -math.inf):
     plt.legend()
     plt.show()
 
+def mul_number_infl(queries: list[Query], min_bound = -math.inf):
+    values = [(query.mul_number, query.execute_time)
+              for query in queries if query.execute_time > min_bound]
+    # values.sort(key=lambda val: val[0])
+    x = [val[0] for val in values]
+    y = [val[1] for val in values]
+    plt.figure(figsize=(8, 4))
+    plt.plot(x, y, 'o', markersize=4, color='blue')
+
+    x11, y11 = x[10000:11000], y[10000:11000]
+    plt.plot(x11, y11, 'o', label="11 type", markersize=4, color='red')
+
+    x12, y12 = x[11000:12000], y[11000:12000]
+    plt.plot(x12, y12, 'o', label="12 type", markersize=4, color='green')
+
+    plt.xlabel('number of MxM operation')
+    plt.ylabel('time of execution, seconds')
+    plt.legend(fontsize=20)
+    plt.show()
+
+
 def unique_ncols(queries: list[Query]):
     unique_ncols = set()
     for query in queries:
@@ -87,8 +110,8 @@ queries = load_queries()
 
 # nvals_infl(queries)
 # unique_ncols(queries)
-iter_number_infl(queries)
+mul_number_infl(queries)
 
-for type in range(9, 20):
-    print(f"type {type + 1} ({type * 100} : {(type + 1) * 100})")
-    iter_number_infl(queries[type * 100 : (type + 1) * 100])
+# for type in range(9, 20):
+#     print(f"type {type + 1} ({type * 100} : {(type + 1) * 100})")
+#     iter_number_infl(queries[type * 100 : (type + 1) * 100])

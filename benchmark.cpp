@@ -416,8 +416,8 @@ std::pair<uint32_t, double> Query::execute() {
 bool benchmark() {
   cuBool_Initialize(CUBOOL_HINT_NO);
 
-  bool preloading = false;
-  bool pretransposed_gpu = false;
+  bool preloading = true;
+  bool pretransposed_gpu = true;
   bool pretransposed = true;
   auto matrices = load_matrices(preloading, pretransposed_gpu);
 
@@ -431,8 +431,8 @@ bool benchmark() {
   std::filesystem::create_directory(QUERIES_LOGS);
 
   std::println("query_number execute_time load_time result");
-  // for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
-  for (uint32_t query_number = 1003; query_number <= 1003; query_number++) {
+  for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
+  // for (uint32_t query_number = 1003; query_number <= 1003; query_number++) {
     if (too_big_queris.contains(query_number)) {
       continue;
     }
