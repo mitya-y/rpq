@@ -373,6 +373,8 @@ void Query::clear() {
 std::pair<uint32_t, double> Query::execute() {
   std::string filename = std::format("{}/{}.txt", QUERIES_LOGS, _query_number);
   std::ofstream log_file(filename);
+  std::optional<std::reference_wrapper<std::ofstream>> logger(log_file);
+  logger = std::nullopt;
 
   cuBool_Matrix recheable = nullptr;
 
@@ -385,11 +387,11 @@ std::pair<uint32_t, double> Query::execute() {
                                                    _graph_transposed,
                                                    _automat_transposed,
                                                    _inverse_lables, _labels_inversed,
-                                                   log_file);
+                                                   logger);
   } else {
     recheable = regular_path_query(_graph, _sourece_vertices,
                                    _automat, _start_states,
-                                   _inverse_lables, _labels_inversed, log_file);
+                                   _inverse_lables, _labels_inversed, logger);
   }
   auto time = make_query_timer.measure();
 
@@ -417,50 +419,56 @@ bool benchmark() {
   cuBool_Initialize(CUBOOL_HINT_NO);
 
   bool preloading = true;
-  bool pretransposed_gpu = true;
+  bool pretransposed_gpu = false;
   bool pretransposed = true;
   auto matrices = load_matrices(preloading, pretransposed_gpu);
+  uint32_t runs_number = 10;
 
   std::set<uint32_t> too_big_queris = {115};
   too_big_queris = {};
 
-  double total_load_time = 0;
-  double total_execute_time = 0;
-
-  std::fstream results_file("result.txt", std::ofstream::out);
   std::filesystem::create_directory(QUERIES_LOGS);
-
-  std::println("query_number execute_time load_time result");
-  for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
-  // for (uint32_t query_number = 1003; query_number <= 1003; query_number++) {
-    if (too_big_queris.contains(query_number)) {
-      continue;
-    }
-
-    Query query;
-    auto [load_successfully, load_time] =
-      query.load(query_number, matrices, preloading, pretransposed, pretransposed_gpu);
-    if (!load_successfully) {
-      std::println("{} skipped", query_number);
-      continue;
-    }
-    auto [result, execute_time] = query.execute();
-    query.clear();
-
-    std::println("{} {} {} {}", query_number, execute_time, load_time, result);
-    std::println(results_file, "{} {} {} {}", query_number, execute_time, load_time, result);
-
-    total_load_time += load_time;
-    total_execute_time += execute_time;
-  }
-
-  std::cout << "\n\n\n";
-  std::println("total load time: {}, total execute time: {}\n",
-               total_load_time, total_execute_time);
-
   std::ofstream total_time_file("total_time_file.txt");
-  std::println(total_time_file, "total load time: {}, total execute time: {}\n",
-                                total_load_time, total_execute_time);
+
+  for (uint32_t run = 1; run <= runs_number; run++) {
+    auto result_file_name = runs_number == 1 ? std::string("result.txt")
+                                             : std::format("result{}.txt", run);
+    std::fstream results_file(result_file_name, std::ofstream::out);
+    double total_load_time = 0;
+    double total_execute_time = 0;
+
+    std::println("run {}", run);
+    std::println("query_number execute_time load_time result");
+    for (uint32_t query_number = 1; query_number <= BENCH_QUERY_COUNT; query_number++) {
+    // for (uint32_t query_number = 1003; query_number <= 1003; query_number++) {
+      if (too_big_queris.contains(query_number)) {
+        continue;
+      }
+
+      Query query;
+      auto [load_successfully, load_time] =
+        query.load(query_number, matrices, preloading, pretransposed, pretransposed_gpu);
+      if (!load_successfully) {
+        std::println("{} skipped", query_number);
+        continue;
+      }
+      auto [result, execute_time] = query.execute();
+      query.clear();
+
+      std::println("{} {} {} {}", query_number, execute_time, load_time, result);
+      std::println(results_file, "{} {} {} {}", query_number, execute_time, load_time, result);
+
+      total_load_time += load_time;
+      total_execute_time += execute_time;
+    }
+
+    std::println("\n\n");
+    std::println("total load time: {}, total execute time: {}\n",
+                 total_load_time, total_execute_time);
+
+    std::println(total_time_file, "total load time: {}, total execute time: {}\n",
+                                  total_load_time, total_execute_time);
+  }
 
   cuBool_Finalize();
 
