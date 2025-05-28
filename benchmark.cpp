@@ -393,7 +393,6 @@ std::pair<uint32_t, double> Query::execute() {
                                    _automat, _start_states,
                                    _inverse_lables, _labels_inversed, logger);
   }
-  auto time = make_query_timer.measure();
 
   cuBool_Index automat_rows, graph_rows;
   cuBool_Matrix_Nrows(_graph.front(), &graph_rows);
@@ -407,6 +406,8 @@ std::pair<uint32_t, double> Query::execute() {
   cuBool_VxM(P, F, recheable, CUBOOL_HINT_NO);
   uint32_t answer = 0;
   cuBool_Vector_Nvals(P, &answer);
+
+  auto time = make_query_timer.measure();
 
   cuBool_Vector_Free(P);
   cuBool_Vector_Free(F);
@@ -428,7 +429,8 @@ bool benchmark() {
   too_big_queris = {};
 
   std::filesystem::create_directory(QUERIES_LOGS);
-  std::ofstream total_time_file("total_time_file.txt");
+  auto total_time_file_name = "total_time_file.txt";
+  std::filesystem::remove(total_time_file_name);
 
   for (uint32_t run = 1; run <= runs_number; run++) {
     auto result_file_name = runs_number == 1 ? std::string("result.txt")
@@ -466,6 +468,7 @@ bool benchmark() {
     std::println("total load time: {}, total execute time: {}\n",
                  total_load_time, total_execute_time);
 
+    std::ofstream total_time_file(total_time_file_name, std::ios_base::ate);
     std::println(total_time_file, "total load time: {}, total execute time: {}\n",
                                   total_load_time, total_execute_time);
   }
