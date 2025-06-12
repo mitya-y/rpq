@@ -1,0 +1,3 @@
+iter_number = 3
+muls_number = 6
+10596933 91609254 91609254

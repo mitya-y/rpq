@@ -1,0 +1,3 @@
+iter_number = 5
+muls_number = 10
+186 10399520 10399520

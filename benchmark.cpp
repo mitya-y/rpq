@@ -471,6 +471,7 @@ bool benchmark() {
     std::ofstream total_time_file(total_time_file_name, std::ios_base::ate);
     std::println(total_time_file, "total load time: {}, total execute time: {}\n",
                                   total_load_time, total_execute_time);
+    total_time_file.close();
   }
 
   cuBool_Finalize();

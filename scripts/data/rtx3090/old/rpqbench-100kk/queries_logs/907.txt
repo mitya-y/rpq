@@ -1,0 +1,3 @@
+iter_number = 14
+muls_number = 28
+529 119058731 119058731

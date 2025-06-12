@@ -12,9 +12,9 @@ CPU_DATA = "rpqbench-10kk"
 GPU_DATA = "rpqbench-10kk"
 
 results_cpu = [0.0] * QUERIES_NUM
-with open(f"data/cpu/{CPU_DATA}/all.txt") as file:
+with open(f"data/cpu/{CPU_DATA}/result.txt") as file:
     for line in file:
-        query, time, _ = map(float, line.split(','))
+        query, time, _, _ = map(float, line.split())
         results_cpu[int(query) - 1] = time
 
 results_gpu = [0.0] * QUERIES_NUM
