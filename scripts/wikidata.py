@@ -51,6 +51,13 @@ for query in good_queries:
     if answers_cpu[query] != answers_gpu[query]:
         print(f"In query {query + 1} answers differ")
 
+def format_scientific(n):
+    if n == 0:
+        return "0"
+    order = len(str(abs(n))) - 1
+    mantissa = n / (10 ** order)
+    return f"{mantissa:.1f}e{order}"
+
 def worst_queries():
     worst = sorted([(q + 1, g / c, g, c, answers_cpu[q])
                    for q, c, g in zip(good_queries, good_cpu, good_gpu) if g / c > 1.5 and g > 1],
@@ -64,30 +71,47 @@ def worst_queries():
         tight_layout=True
     )
     current_query_index = 0
-    for ax1 in axes:
-        # for ax in ax1:
-            ax = ax1
-            query = worst[current_query_index][0]
-            current_query_index += 1
-            i = good_queries.index(query - 1)
-            num = 8
-            queries = good_queries[max(i - num, 0) : min(i + num, len(good_queries) - 1)]
+    for ax in axes:
+        query = worst[current_query_index][0]
+        current_query_index += 1
 
-            x = original_indexes[max(i - num, 0) : min(i + num, len(original_indexes) - 1)]
-            y = [answers_gpu[q] for q in queries]
+        i = good_queries.index(query - 1)
+        num = 8
+        queries = good_queries[max(i - num, 0) : min(i + num + 1, len(good_queries) - 1)]
 
-            ax.plot(x, y, label="time(answers)")
-            ax.set_xlabel('query number')
-            ax.set_ylabel('answers number')
-            ax.set_title(f"query {query}")
+        y = [answers_gpu[q] for q in queries]
+        x = range(len(y))
+        red_value = answers_gpu[query - 1]
 
-            for coord in x:
-                ax.axvline(x=coord, color = 'red' if coord == query else 'green', alpha=0.3)
-            ax.set_xticks(x)
+        bars = ax.bar(x, y, color='blue')
+        red_bar = ax.bar([num], red_value, color='red')
 
-            ax.legend()
+        ax.set_yscale('log')
+        ax.set_xlabel('query number')
+        ax.set_ylabel('answers number')
+        ax.set_title(f"query {query}")
+        ax.set_xticks(x)
+        ax.set_xticklabels([q + 1 for q in queries])
 
-    plt.tight_layout()
+        all_values = y + [red_value]
+        max_val = max(all_values)
+        ax.set_ylim(top=max_val * 30)
+
+        for i, bar in enumerate(bars):
+            height = bar.get_height()
+            ax.annotate(f'{format_scientific(height)}',
+                        xy=(bar.get_x() + bar.get_width() / 2, height),
+                        xytext=(0, 3),
+                        textcoords="offset points",
+                        ha='center',
+                        va='bottom',
+                        fontsize=9,  # Уменьшаем размер шрифта
+                        fontweight='bold')
+
+        ax.grid(True, axis='y', linestyle='--', alpha=0.6)
+        ax.set_axisbelow(True)
+        plt.tight_layout(pad=2.0)
+
     plt.savefig('worst.svg')
     plt.show()
     return worst
