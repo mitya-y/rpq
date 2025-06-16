@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from pprint import pprint
 import statistics as stat
+import numpy as np
 
 QUERIES_NUM = 660
 
@@ -86,6 +87,8 @@ def worst_queries():
 
             ax.legend()
 
+    plt.tight_layout()
+    plt.savefig('worst.svg')
     plt.show()
     return worst
 
@@ -107,7 +110,7 @@ def answers_dependency():
 
 def all_query_stats(draw_together: bool = True):
     axis = list([g + 1 for g in good_queries])
-    
+
     if draw_together:
         plt.figure(figsize=(8, 4))
         plt.plot(axis, good_gpu, label="GPU")
@@ -130,17 +133,100 @@ def all_query_stats(draw_together: bool = True):
             ax.legend(title_fontsize=40)
 
     plt.show()
-    
+
+def cloud():
+    output='output.svg'
+    s = 20
+    colors = [
+        # "#b25da6",
+        "#ce4a4a",
+        # "#eaaf41",
+        "#6688c3",
+        # "#48a56a",
+        # "#769c9b",
+    ]
+
+    fig, axes = plt.subplots(
+        nrows=1,
+        ncols=2,
+        figsize=(8 * 10, 6 * 10),
+        tight_layout=True
+    )
+    for i, ax, y_values, title in zip(range(2), axes, [good_cpu, good_gpu], ["CPU", "GPU"]):
+        box_width = 0.6
+        dataset_positions = []
+        dataset_names = []
+        color = colors[i % len(colors)]
+        base_x = i
+        x_values = []
+
+        for _ in range(len(y_values)):
+            drift = np.random.uniform(-0.15, 0.15)
+            x_values.append(base_x + drift)
+
+        ax.scatter(x_values, y_values,
+                  color=color,
+                  label=title,
+                  alpha=0.8,
+                  s=s)
+
+        current_mean = np.mean(y_values)
+        current_median = np.median(y_values)
+
+        ax.hlines(y=current_mean, xmin=base_x-box_width/2, xmax=base_x+box_width/2,
+                  colors=color, linestyles=':', linewidth=3, alpha=1.0)
+        ax.hlines(y=current_median, xmin=base_x-box_width/2, xmax=base_x+box_width/2,
+                  colors=color, linestyles='-', linewidth=3, alpha=1.0)
+
+        dataset_positions.append(base_x)
+        dataset_names.append(title)
+
+        ax.set_yscale('log')
+        ax.set_xticks(dataset_positions)
+        ax.set_xticklabels(dataset_names, ha='right')
+
+        ax.set_ylabel('Execution time, s')
+        ax.grid(True, alpha=0.3)
+
+        legend_elements = [
+            plt.Line2D([0], [0], color='black', linestyle=':', linewidth=2, label='Mean'),
+            plt.Line2D([0], [0], color='black', linestyle='-', linewidth=2, label='Median')
+        ]
+        ax.legend(handles=legend_elements, loc='lower right', fontsize=10)
+
+        ax.text(x=0.01,  # Отступ от левого края (1%)
+            y=current_mean, 
+            s=f"{current_mean:.3f}",  # Форматирование значения
+            transform=ax.get_yaxis_transform(),  # Критично для позиционирования!
+            verticalalignment='center',
+            horizontalalignment='left',
+            color=color,
+            fontsize=10,
+            fontweight='bold',
+            bbox=dict(facecolor='white', alpha=0.8, boxstyle='round'))  # Фон для читаемости
+
+        ax.text(x=0.01,  # Отступ от левого края (1%)
+            y=current_median, 
+            s=f"{current_median:.3f}",  # Форматирование значения
+            transform=ax.get_yaxis_transform(),  # Критично для позиционирования!
+            verticalalignment='center',
+            horizontalalignment='left',
+            color=color,
+            fontsize=10,
+            fontweight='bold',
+            bbox=dict(facecolor='white', alpha=0.8, boxstyle='round'))  # Фон для читаемости
+
+
+    plt.tight_layout()
+    plt.savefig(output)
+    plt.show()
 
 pprint(worst_queries())
 
 # answers_dependency()
-average_error()
+# average_error()
 # all_query_stats(True)
 
-a = sorted([(results_gpu[i], i + 1) for i in range(QUERIES_NUM)], key = lambda x: x[0])
-a.reverse()
-pprint(a[:10])
-print(results_gpu[123], results_gpu[123] / results_cpu[123])
+# cloud()
 
 

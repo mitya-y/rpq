@@ -6,22 +6,31 @@ QUERIES_NUM_PER_TYPE = 1000
 
 QUERIES_NUM = QUERIES_TYPES_NUM * QUERIES_NUM_PER_TYPE
 
-# CPU_DATA = "rpqbench-100kk"
-# GPU_DATA = "rpqbench-100kk-rtx3050"
-CPU_DATA = "rpqbench-10kk"
-GPU_DATA = "rpqbench-10kk"
+DATA_PATH = "rpqbench-10kk"
 
 results_cpu = [0.0] * QUERIES_NUM
-with open(f"data/cpu/{CPU_DATA}/result.txt") as file:
+answers_cpu = [0] * QUERIES_NUM
+errors_cpu = [0.0] * QUERIES_NUM
+with open(f"data/cpu/{DATA_PATH}/result.txt") as file:
     for line in file:
-        query, time, _, _ = map(float, line.split())
+        query, time, error, ans = map(float, line.split())
+        if query > QUERIES_NUM:
+            continue
         results_cpu[int(query) - 1] = time
+        errors_cpu[int(query) - 1] = error
+        answers_cpu[int(query) - 1] = int(ans)
 
 results_gpu = [0.0] * QUERIES_NUM
-with open(f"data/gpu/{GPU_DATA}/result.txt") as file:
+answers_gpu = [0.0] * QUERIES_NUM
+errors_gpu = [0.0] * QUERIES_NUM
+with open(f"data/gpu/{DATA_PATH}/result.txt") as file:
     for line in file:
-        query, time, _, _ = map(float, line.split())
+        query, time, error, ans = map(float, line.split())
+        if query > QUERIES_NUM:
+            continue
         results_gpu[int(query) - 1] = time
+        errors_gpu[int(query) - 1] = error
+        answers_gpu[int(query) - 1] = int(ans)
 
 total_cpu_time = sum(results_cpu)
 total_gpu_time = sum(results_gpu)
@@ -55,6 +64,9 @@ def query_type_stats(queries_to_exclued = []):
     plt.legend()
     plt.show()
 
+    for i, c, g in zip(range(QUERIES_TYPES_NUM), cpu_y, gpu_y):
+        print(f" & {g} & {c} & {g / c}")
+
 def accelerates():
     for c, g, i in zip(queries_type_cpu, queries_type_gpu, range(QUERIES_NUM)):
         print(f"query {i + 1} accelerate is {g / c}")
@@ -62,12 +74,12 @@ def accelerates():
 
 def all_query_stats(draw_together: bool = True):
     axis = list(range(1, QUERIES_NUM + 1))
-    
+
     if draw_together:
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.plot(axis, results_gpu, label="GPU")
         ax.plot(axis, results_cpu, label="CPU")
-        
+
         ticks = [i * 1000 for i in range(1, QUERIES_TYPES_NUM)]
         ax.set_xticks(ticks)
         for x in ticks:
@@ -95,10 +107,53 @@ def all_query_stats(draw_together: bool = True):
             ax.legend()
 
     plt.show()
-    
-query_type_stats()
-# query_type_stats([11, 12, 13, 15])
-accelerates()
-all_query_stats(True)
 
+
+def answers_dependency():
+    res = [(r, a) for r, a in zip(results_gpu, answers_gpu)]
+    res.sort(key=lambda x: x[1])
+    x = [x[1] for x in res]
+    y = [x[0] for x in res]
+
+    plt.figure(figsize=(8, 4))
+    plt.plot(x, y, label="time(answers)")
+    plt.show()
+
+def analize_iterration_number():
+    path = "data/gpu/old/rpqbench-10kk/queries_logs"
+    iters = [0] * QUERIES_NUM
+    for i in range(QUERIES_NUM):
+        with open(f"{path}/{i + 1}.txt") as f:
+            # f.readline()
+            iters[i] = int(f.readline().split('=')[1])
+    x = [i + 1 for i in range(QUERIES_NUM)]
+    plt.plot(x, iters, 'o', label="all types", markersize=1, color='blue')
+
+    types = [11, 12]
+    colors = ['red', 'green', 'yellow']
+    for type, color in zip(types, colors):
+        y = iters[(type - 1) * QUERIES_NUM_PER_TYPE : type * QUERIES_NUM_PER_TYPE]
+        x = [i + 1 for i in range((type - 1) * QUERIES_NUM_PER_TYPE, type * QUERIES_NUM_PER_TYPE)]
+        plt.plot(x, y, 'o', label=f"{type} type", markersize=2, color=color)
+
+    ticks = [i * 1000 + 500 for i in range(QUERIES_TYPES_NUM)]
+    labels = [f"{i + 1}" for i in range(QUERIES_TYPES_NUM)]
+    plt.xticks(ticks, labels)
+    bounds = [i * 1000 for i in range(QUERIES_TYPES_NUM + 1)]
+    for x in bounds:
+        plt.axvline(x=x, color='green', alpha=0.3)
+
+    plt.xlabel('query type')
+    plt.ylabel('iterrations number')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig('itteration_number.svg')
+    plt.show()
+
+# query_type_stats()
+# accelerates()
+# all_query_stats(True)
+analize_iterration_number()
+
+# answers_dependency()
 
