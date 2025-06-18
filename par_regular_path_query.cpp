@@ -6,7 +6,6 @@
 #include <numeric>
 #include <ranges>
 
-#include "cubool.h"
 #include "regular_path_query.hpp"
 #include "timer.hpp"
 

@@ -9,8 +9,6 @@
 #include <ranges>
 #include <set>
 
-#include <cubool.h>
-
 #include <fast_matrix_market/fast_matrix_market.hpp>
 
 #include "regular_path_query.hpp"
@@ -373,8 +371,6 @@ void Query::clear() {
 std::pair<uint32_t, double> Query::execute() {
   std::string filename = std::format("{}/{}.txt", QUERIES_LOGS, _query_number);
   std::ofstream log_file(filename);
-  std::optional<std::reference_wrapper<std::ofstream>> logger(log_file);
-  logger = std::nullopt;
 
   cuBool_Matrix recheable = nullptr;
 
@@ -386,12 +382,11 @@ std::pair<uint32_t, double> Query::execute() {
                                                    _automat, _start_states,
                                                    _graph_transposed,
                                                    _automat_transposed,
-                                                   _inverse_lables, _labels_inversed,
-                                                   logger);
+                                                   _inverse_lables, _labels_inversed);
   } else {
     recheable = regular_path_query(_graph, _sourece_vertices,
                                    _automat, _start_states,
-                                   _inverse_lables, _labels_inversed, logger);
+                                   _inverse_lables, _labels_inversed);
   }
 
   cuBool_Index automat_rows, graph_rows;

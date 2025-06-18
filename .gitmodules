@@ -1,9 +1,9 @@
-[submodule "cuBool"]
-	path = cuBool
-	url = https://github.com/mitya-y/cuBool.git
 [submodule "fast_matrix_market"]
 	path = fast_matrix_market
 	url = https://github.com/alugowski/fast_matrix_market
 [submodule "thread-pool"]
 	path = thread-pool
 	url = https://github.com/bshoshany/thread-pool
+[submodule "cuBoolGraph"]
+	path = cuBoolGraph
+	url = https://github.com/SparseLinearAlgebra/cuBoolGraph.git
