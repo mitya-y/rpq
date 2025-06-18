@@ -1,5 +1,5 @@
-from os import access
 import matplotlib.pyplot as plt
+import numpy as np
 
 QUERIES_TYPES_NUM = 20
 QUERIES_NUM_PER_TYPE = 1000
@@ -127,14 +127,14 @@ def analize_iterration_number():
             # f.readline()
             iters[i] = int(f.readline().split('=')[1])
     x = [i + 1 for i in range(QUERIES_NUM)]
-    plt.plot(x, iters, 'o', label="all types", markersize=1, color='blue')
+    plt.plot(x, iters, 'o', label="all types", markersize=2, color='blue')
 
     types = [11, 12]
     colors = ['red', 'green', 'yellow']
     for type, color in zip(types, colors):
         y = iters[(type - 1) * QUERIES_NUM_PER_TYPE : type * QUERIES_NUM_PER_TYPE]
         x = [i + 1 for i in range((type - 1) * QUERIES_NUM_PER_TYPE, type * QUERIES_NUM_PER_TYPE)]
-        plt.plot(x, y, 'o', label=f"{type} type", markersize=2, color=color)
+        plt.plot(x, y, 'o', label=f"{type} type", markersize=3, color=color)
 
     ticks = [i * 1000 + 500 for i in range(QUERIES_TYPES_NUM)]
     labels = [f"{i + 1}" for i in range(QUERIES_TYPES_NUM)]
@@ -150,10 +150,98 @@ def analize_iterration_number():
     plt.savefig('itteration_number.svg')
     plt.show()
 
+def cloud():
+    output='rpqbench_cloud.svg'
+    colors = [
+        # "#b25da6",
+        "#ce4a4a",
+        # "#eaaf41",
+        "#6688c3",
+        # "#48a56a",
+
+        # "#769c9b",
+    ]
+
+    box_width = 0.6
+    dataset_positions = []
+    dataset_names = []
+    for i, y_values, title in zip(range(2), [results_cpu, results_gpu], ["CPU", "GPU"]):
+        color = colors[i % len(colors)]
+        base_x = i
+        x_values = []
+
+        for _ in range(len(y_values)):
+            drift = np.random.uniform(-0.15, 0.15)
+            x_values.append(base_x + drift)
+
+        plt.scatter(x_values, y_values,
+                  color=color,
+                  label=title,
+                  alpha=0.8,
+                  s=10)
+
+        plt.scatter(x_values[10000:11000], y_values[10000:11000], color='green', label='11 type', alpha=0.8, s=10)
+        plt.scatter(x_values[11000:12000], y_values[11000:12000], color='yellow', label='12 type', alpha=0.8, s=10)
+
+        current_mean = np.mean(y_values)
+        current_median = np.median(y_values)
+
+        plt.hlines(y=current_mean, xmin=base_x-box_width/2, xmax=base_x+box_width/2,
+                  colors=color, linestyles=':', linewidth=3, alpha=1.0)
+        plt.hlines(y=current_median, xmin=base_x-box_width/2, xmax=base_x+box_width/2,
+                  colors=color, linestyles='-', linewidth=3, alpha=1.0)
+
+        print(f"{title} median is {current_median}")
+        print(f"{title} mean is {current_mean}")
+
+        dataset_positions.append(base_x)
+        dataset_names.append(title)
+
+        legend_elements = [
+            plt.Line2D([0], [0], color='black', linestyle=':', linewidth=2, label='Mean'),
+            plt.Line2D([0], [0], color='black', linestyle='-', linewidth=2, label='Median')
+        ]
+        plt.legend(handles=legend_elements, loc='lower right', fontsize=10)
+
+        ax = plt.gca()
+        ax.text(x=0.01+base_x*0.54,  # Отступ от левого края (1%)
+            y=current_mean,
+            s=f"{current_mean:.5f}",  # Форматирование значения
+            transform=ax.get_yaxis_transform(),  # Критично для позиционирования!
+            verticalalignment='center',
+            horizontalalignment='left',
+            color=color,
+            fontsize=7,
+            fontweight='bold',
+            bbox=dict(facecolor='white', alpha=0.8, boxstyle='round'))  # Фон для читаемости
+
+        ax.text(x=0.01+base_x*0.54,  # Отступ от левого края (1%)
+            y=current_median,
+            s=f"{current_median:.5f}",  # Форматирование значения
+            transform=ax.get_yaxis_transform(),  # Критично для позиционирования!
+            verticalalignment='center',
+            horizontalalignment='left',
+            color=color,
+            fontsize=7,
+            fontweight='bold',
+            bbox=dict(facecolor='white', alpha=0.8, boxstyle='round'))  # Фон для читаемости
+
+    plt.xticks(dataset_positions, dataset_names)
+    # ax.set_xticklabels(dataset_names, ha='right')
+
+    plt.yscale('log')
+    plt.ylabel('Execution time, s')
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(output)
+    plt.show()
+
+
 # query_type_stats()
 # accelerates()
 # all_query_stats(True)
-analize_iterration_number()
+# analize_iterration_number()
+cloud()
 
 # answers_dependency()
-
